@@ -4,6 +4,7 @@
 from mathutils import Vector
 from io_mesh_w3d.common.utils.helpers import *
 from io_mesh_w3d.common.structs.hierarchy import *
+from io_mesh_w3d.common.utils.object_settings_bridge import should_export_transform
 
 
 pick_plane_names = ['PICK']
@@ -11,6 +12,7 @@ pick_plane_names = ['PICK']
 
 def retrieve_hierarchy(context, container_name):
     root = HierarchyPivot(name='ROOTTRANSFORM')
+    terrain_mode = getattr(context, '_w3d_export_options', {}).get('terrain_mode', False)
 
     hierarchy = Hierarchy(
         header=HierarchyHeader(),
@@ -45,10 +47,13 @@ def retrieve_hierarchy(context, container_name):
     if len(rigs) > 1:
         context.error(f'only one armature per scene allowed! Exporting only the first one: {rigs[0].name}')
 
-    meshes = get_objects('MESH')
+    if not terrain_mode:
+        meshes = get_objects('MESH')
 
-    for mesh in meshes:
-        process_mesh(context, mesh, hierarchy, pivot_id_dict)
+        for mesh in meshes:
+            if not should_export_transform(mesh):
+                continue
+            process_mesh(context, mesh, hierarchy, pivot_id_dict)
 
     hierarchy.header.num_pivots = len(hierarchy.pivots)
     return hierarchy, rig

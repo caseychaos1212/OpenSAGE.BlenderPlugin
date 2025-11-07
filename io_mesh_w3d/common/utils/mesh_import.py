@@ -4,6 +4,7 @@
 import bpy
 import bmesh
 from io_mesh_w3d.common.utils.material_import import *
+from io_mesh_w3d.common.utils.object_settings_bridge import populate_object_settings_from_mesh
 
 
 def create_mesh(context, mesh_struct, coll):
@@ -33,8 +34,10 @@ def create_mesh(context, mesh_struct, coll):
     mesh.two_sided = mesh_struct.two_sided()
 
     mesh_ob = bpy.data.objects.new(actual_mesh_name, mesh)
+    mesh_struct.header.mesh_name = actual_mesh_name
 
     mesh_ob.use_empty_image_alpha = True
+    populate_object_settings_from_mesh(mesh_ob, mesh_struct)
 
     link_object_to_active_scene(mesh_ob, coll)
 

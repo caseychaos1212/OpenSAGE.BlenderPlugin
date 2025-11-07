@@ -20,7 +20,7 @@ def is_visibility(fcu):
     return 'visibility' in fcu.data_path or 'hide' in fcu.data_path
 
 
-def retrieve_channels(obj, hierarchy, timecoded, name=None):
+def retrieve_channels(obj, hierarchy, timecoded, name=None, default_frame_range=None):
     if obj.animation_data is None or obj.animation_data.action is None:
         return []
 
@@ -74,8 +74,11 @@ def retrieve_channels(obj, hierarchy, timecoded, name=None):
                 channel.pivot = pivot_index
                 num_frames = range_[1] + 1 - range_[0]
                 if num_frames == 1:
-                    channel.first_frame = bpy.context.scene.frame_start
-                    channel.last_frame = bpy.context.scene.frame_end
+                    if default_frame_range is not None:
+                        channel.first_frame, channel.last_frame = default_frame_range
+                    else:
+                        channel.first_frame = bpy.context.scene.frame_start
+                        channel.last_frame = bpy.context.scene.frame_end
                 else:
                     channel.first_frame = int(range_[0])
                     channel.last_frame = int(range_[1])
@@ -117,19 +120,27 @@ def retrieve_channels(obj, hierarchy, timecoded, name=None):
     return channels
 
 
-def retrieve_animation(context, animation_name, hierarchy, rig, timecoded):
+def retrieve_animation(context, animation_name, hierarchy, rig, timecoded, frame_range=None):
     channels = []
 
+    if frame_range is None:
+        start_frame = bpy.context.scene.frame_start
+        end_frame = bpy.context.scene.frame_end
+    else:
+        start_frame, end_frame = frame_range
+
+    fallback_range = (start_frame, end_frame)
+
     for mesh in get_objects('MESH'):
-        if retrieve_channels(mesh, hierarchy, timecoded, mesh.name):
+        if retrieve_channels(mesh, hierarchy, timecoded, mesh.name, default_frame_range=fallback_range):
             context.warning(f'Mesh \'{mesh.name}\' is animated, animate its parent bone instead!')
 
     if rig is not None:
-        chnA = retrieve_channels(rig, hierarchy, timecoded)
+        chnA = retrieve_channels(rig, hierarchy, timecoded, default_frame_range=fallback_range)
         if len(chnA) > 0:
             channels.extend(chnA)
             animation_name = rig.animation_data.action.name
-        chnB = retrieve_channels(rig.data, hierarchy, timecoded)
+        chnB = retrieve_channels(rig.data, hierarchy, timecoded, default_frame_range=fallback_range)
         if len(chnB) > 0:
             channels.extend(chnB)
             animation_name = rig.animation_data.action.name
@@ -144,9 +155,7 @@ def retrieve_animation(context, animation_name, hierarchy, rig, timecoded):
     ani_struct.header.name = animation_name
     ani_struct.header.hierarchy_name = hierarchy.name()
 
-    start_frame = bpy.context.scene.frame_start
-    end_frame = bpy.context.scene.frame_end
-
     ani_struct.header.num_frames = end_frame + 1 - start_frame
     ani_struct.header.frame_rate = bpy.context.scene.render.fps
+
     return ani_struct

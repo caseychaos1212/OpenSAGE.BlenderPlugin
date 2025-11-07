@@ -7,6 +7,7 @@ from bpy_extras import node_shader_utils
 
 from io_mesh_w3d.common.utils.helpers import *
 from io_mesh_w3d.w3d.structs.mesh_structs.vertex_material import *
+from io_mesh_w3d.common.utils.material_settings_bridge import populate_settings_from_material
 
 
 ##########################################################################
@@ -120,6 +121,7 @@ def create_material_from_vertex_material(name, vert_mat):
     material.vm_args_0 = vert_mat.vm_args_0.replace('\r\n', ', ')
     material.vm_args_1 = vert_mat.vm_args_1.replace('\r\n', ', ')
 
+    populate_settings_from_material(material)
     return material, principled
 
 
@@ -245,6 +247,7 @@ def create_material_from_shader_material(context, name, shader_mat):
         else:
             context.error('shader property not implemented: ' + prop.name)
 
+    populate_settings_from_material(material)
     return material, principled
 
 

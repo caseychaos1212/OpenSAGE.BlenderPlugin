@@ -1,14 +1,21 @@
 # <pep8 compliant>
 # Written by Stephan Vedder and Michael Schnabel
 
+import os
+
+import bpy
+
 from io_mesh_w3d.import_utils import *
 from io_mesh_w3d.common.structs.collision_box import *
 from io_mesh_w3d.common.structs.data_context import *
 from io_mesh_w3d.common.structs.hierarchy import *
 from io_mesh_w3d.common.structs.hlod import *
 from io_mesh_w3d.common.structs.mesh import *
+from io_mesh_w3d.common.structs.mesh_structs.texture import TextureInfo
 from io_mesh_w3d.w3d.structs.dazzle import *
 from io_mesh_w3d.w3d.structs.compressed_animation import *
+from io_mesh_w3d.common.utils.object_settings_bridge import populate_object_settings_from_mesh
+from io_mesh_w3d.common.utils.material_settings_bridge import populate_settings_from_material
 
 
 def load_file(context, data_context, path=None):
@@ -142,6 +149,7 @@ def load(context):
                 data_context.animation,
                 data_context.compressed_animation,
                 data_context.dazzles)
+    backfill_w3d_properties(data_context)
     return {'FINISHED'}
 
 
@@ -160,3 +168,145 @@ W3D_CHUNK_AGGREGATE = 0x00000600
 W3D_CHUNK_NULL_OBJECT = 0x00000750
 W3D_CHUNK_LIGHTSCAPE = 0x00000800
 W3D_CHUNK_SOUNDROBJ = 0x00000A00
+def backfill_w3d_properties(data_context):
+    """Populate the new Blender-side property groups using the W3D source data."""
+    for mesh_struct in data_context.meshes:
+        obj_name = mesh_struct.header.mesh_name or mesh_struct.name()
+        if not obj_name:
+            continue
+        obj = bpy.data.objects.get(obj_name)
+        if obj is None:
+            continue
+        populate_object_settings_from_mesh(obj, mesh_struct)
+        populate_material_settings_from_passes(obj, mesh_struct)
+
+
+ANIM_MODE_FROM_INT = {
+    0: 'LOOP',
+    1: 'PINGPONG',
+    2: 'ONCE',
+    3: 'MANUAL',
+}
+
+
+def populate_material_settings_from_passes(obj, mesh_struct):
+    materials = list(obj.data.materials) if obj.data else []
+    if not materials:
+        return
+
+    passes_by_material = {}
+    for mat_pass in mesh_struct.material_passes:
+        target_idx = None
+        if mat_pass.vertex_material_ids:
+            target_idx = mat_pass.vertex_material_ids[0]
+        elif mat_pass.shader_material_ids:
+            target_idx = mat_pass.shader_material_ids[0]
+        if target_idx is None:
+            continue
+        passes_by_material.setdefault(target_idx, []).append(mat_pass)
+
+    for target_idx, passes in passes_by_material.items():
+        if target_idx < 0 or target_idx >= len(materials):
+            continue
+        material = materials[target_idx]
+        settings = getattr(material, 'w3d_material_settings', None)
+        if settings is None:
+            continue
+
+        template = snapshot_pass(settings.passes[0]) if settings.passes else None
+        settings.passes.clear()
+
+        for mat_pass in passes:
+            pass_prop = settings.passes.add()
+            if template:
+                apply_pass_template(pass_prop, template)
+            populate_stage_from_tx(pass_prop.stage0, mat_pass, 0, mesh_struct)
+            populate_stage_from_tx(pass_prop.stage1, mat_pass, 1, mesh_struct)
+            pass_prop.name = f'Pass {len(settings.passes)}'
+
+        settings.active_pass_index = 0
+
+
+def populate_stage_from_tx(stage_prop, mat_pass, stage_index, mesh_struct):
+    if stage_index >= len(mat_pass.tx_stages):
+        stage_prop.enabled = False
+        stage_prop.texture = None
+        return
+
+    stage = mat_pass.tx_stages[stage_index]
+    tex_struct = resolve_texture_struct(stage, mesh_struct.textures)
+
+    if tex_struct is None:
+        stage_prop.enabled = False
+        stage_prop.texture = None
+        return
+
+    img = find_image_for_texture(tex_struct)
+    stage_prop.enabled = img is not None
+    stage_prop.texture = img
+
+    info = tex_struct.texture_info or TextureInfo()
+    if info.frame_count:
+        stage_prop.frames = int(info.frame_count)
+    if info.frame_rate:
+        stage_prop.fps = info.frame_rate
+    stage_prop.animation_mode = ANIM_MODE_FROM_INT.get(int(info.animation_type), stage_prop.animation_mode)
+
+
+def resolve_texture_struct(stage, textures):
+    if not stage.tx_ids:
+        return None
+    indices = stage.tx_ids[0]
+    if not indices:
+        return None
+    tex_index = indices[0]
+    if tex_index < 0 or tex_index >= len(textures):
+        return None
+    return textures[tex_index]
+
+
+def find_image_for_texture(tex_struct):
+    candidates = [
+        tex_struct.id,
+        os.path.basename(tex_struct.file),
+        tex_struct.file,
+    ]
+    for name in candidates:
+        if not name:
+            continue
+        img = bpy.data.images.get(name)
+        if img:
+            return img
+    return None
+
+
+def snapshot_pass(pass_prop):
+    if pass_prop is None:
+        return None
+    return {
+        'ambient': tuple(pass_prop.ambient),
+        'diffuse': tuple(pass_prop.diffuse),
+        'specular': tuple(pass_prop.specular),
+        'emissive': tuple(pass_prop.emissive),
+        'specular_to_diffuse': pass_prop.specular_to_diffuse,
+        'opacity': pass_prop.opacity,
+        'translucency': pass_prop.translucency,
+        'shininess': pass_prop.shininess,
+        'uv0': pass_prop.uv_channel_stage0,
+        'uv1': pass_prop.uv_channel_stage1,
+    }
+
+
+def apply_pass_template(target, template):
+    if not template:
+        return
+    target.ambient = template['ambient']
+    target.diffuse = template['diffuse']
+    target.specular = template['specular']
+    target.emissive = template['emissive']
+    target.specular_to_diffuse = template['specular_to_diffuse']
+    target.opacity = template['opacity']
+    target.translucency = template['translucency']
+    target.shininess = template['shininess']
+    target.uv_channel_stage0 = template['uv0']
+    target.uv_channel_stage1 = template['uv1']

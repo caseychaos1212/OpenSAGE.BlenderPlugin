@@ -1,9 +1,300 @@
 # <pep8 compliant>
 # Written by Stephan Vedder and Michael Schnabel
 
+import configparser
+import os
+from pathlib import Path
+
 import bpy
-from bpy.props import *
-from bpy.types import Material, PropertyGroup, Bone, Mesh
+from bpy.props import (
+    BoolProperty,
+    CollectionProperty,
+    EnumProperty,
+    FloatProperty,
+    FloatVectorProperty,
+    IntProperty,
+    PointerProperty,
+    StringProperty,
+)
+from bpy.types import Material, PropertyGroup, Bone, Mesh, Object
+
+
+W3D_GEOMETRY_TYPE_ITEMS = [
+    ('NORMAL', 'Normal', 'Standard geometry.'),
+    ('CAM_PARAL', 'Cam-Paral', 'Camera parallel billboard.'),
+    ('OBBOX', 'OBBox', 'Oriented bounding box.'),
+    ('AABOX', 'AABox', 'Axis-aligned bounding box.'),
+    ('CAM_ORIENT', 'Cam-Oriented', 'Camera oriented billboard.'),
+    ('NULL_LOD', 'Null LOD', 'LOD placeholder.'),
+    ('DAZZLE', 'Dazzle', 'Renegade dazzle sprite.'),
+    ('AGGREGATE', 'Aggregate', 'Aggregate geometry.'),
+    ('CAM_Z_ORIENT', 'Cam Z-Oriented', 'Camera Z oriented billboard.'),
+]
+
+W3D_STAGE_ANIM_ITEMS = [
+    ('LOOP', 'Loop', 'Repeat animation indefinitely.'),
+    ('PINGPONG', 'Ping Pong', 'Play forward then backward.'),
+    ('ONCE', 'Once', 'Play single time.'),
+    ('MANUAL', 'Manual', 'Controlled by code.'),
+]
+
+W3D_PASS_HINT_ITEMS = [
+    ('BASE_TEXTURE', 'Base Texture', 'Diffuse/base pass.'),
+    ('EMISSIVE_LIGHT_MAP', 'Emissive Light Map', 'Light/emissive data.'),
+    ('ENVIRONMENT_MAP', 'Environment Map', 'Environment reflection.'),
+    ('SHINYNESS_MAP', 'Shinyness Map', 'Specular/shininess data.'),
+]
+
+
+def _load_dazzle_items():
+    """Load dazzle names from the bundled INI file or fall back to defaults."""
+    default_items = [
+        ('DEFAULT', 'DEFAULT', 'Default dazzle entry.'),
+        ('SUN', 'SUN', 'Sun glare preset.'),
+        ('REN_L5_STREETLIGHT', 'REN_L5_STREETLIGHT', 'Renegade streetlight.'),
+        ('REN_BRAKELIGHT', 'REN_BRAKELIGHT', 'Renegade brake light.'),
+        ('REN_HEADLIGHT', 'REN_HEADLIGHT', 'Renegade headlight.'),
+        ('REN_L5_REDLIGHT', 'REN_L5_REDLIGHT', 'Renegade red light.'),
+        ('REN_NUKE', 'REN_NUKE', 'Renegade nuke dazzle.'),
+        ('REN_BLINKLIGHT_RED', 'REN_BLINKLIGHT_RED', 'Renegade blinking red light.'),
+        ('REN_BLINKLIGHT_WHITE', 'REN_BLINKLIGHT_WHITE', 'Renegade blinking white light.'),
+        ('REN_VEHICLELIGHT_RED', 'REN_VEHICLELIGHT_RED', 'Renegade vehicle red light.'),
+        ('REN_VEHICLELIGHT_WHITE', 'REN_VEHICLELIGHT_WHITE', 'Renegade vehicle white light.'),
+    ]
+
+    addon_root = Path(os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir)))
+    ini_path = addon_root / 'exporter' / 'max2w3d-master' / 'w3dmaxtools' / 'Content' / 'dazzle.ini'
+    if not ini_path.exists():
+        return default_items
+
+    parser = configparser.ConfigParser()
+    try:
+        parser.read(ini_path, encoding='utf-8')
+    except (OSError, configparser.Error):
+        return default_items
+
+    if 'Dazzles_List' not in parser:
+        return default_items
+
+    section = parser['Dazzles_List']
+    entries = []
+    for key in sorted(section, key=lambda value: int(value) if value.isdigit() else value):
+        value = section[key].strip()
+        if not value:
+            continue
+        entries.append((value, value, f'Dazzle preset {value}'))
+
+    return entries or default_items
+
+
+DEFAULT_DAZZLE_ITEMS = _load_dazzle_items()
+_DAZZLE_CACHE = {'path': None, 'items': DEFAULT_DAZZLE_ITEMS}
+
+
+def _load_items_from_path(path):
+    target = Path(path) if path else None
+    if not target or not target.exists():
+        return DEFAULT_DAZZLE_ITEMS
+    parser = configparser.ConfigParser()
+    try:
+        parser.read(target, encoding='utf-8')
+    except (OSError, configparser.Error):
+        return DEFAULT_DAZZLE_ITEMS
+    if 'Dazzles_List' not in parser:
+        return DEFAULT_DAZZLE_ITEMS
+    section = parser['Dazzles_List']
+    def sort_key(value):
+        return (not value.isdigit(), int(value) if value.isdigit() else value)
+    entries = []
+    for key in sorted(section, key=sort_key):
+        value = section[key].strip()
+        if not value:
+            continue
+        entries.append((value, value, f'Dazzle preset {value}'))
+    return entries or DEFAULT_DAZZLE_ITEMS
+
+
+def refresh_dazzle_items(path):
+    """Refresh the cached dazzle enum list."""
+    resolved = os.path.abspath(path) if path else ''
+    if _DAZZLE_CACHE['path'] == resolved:
+        return
+    _DAZZLE_CACHE['items'] = _load_items_from_path(resolved)
+    _DAZZLE_CACHE['path'] = resolved
+
+
+def get_dazzle_enum_items(self, context):
+    if context and getattr(context, 'preferences', None):
+        prefs = context.preferences.addons.get(__package__)
+        if prefs and getattr(prefs, 'preferences', None):
+            refresh_dazzle_items(prefs.preferences.dazzle_ini_path)
+    items = _DAZZLE_CACHE.get('items') or [('DEFAULT', 'DEFAULT', 'Default dazzle preset')]
+    return items
+
+
+class W3DStageSettings(PropertyGroup):
+    enabled: BoolProperty(name='Enabled', default=False)
+    texture: PointerProperty(name='Texture', type=bpy.types.Image)
+    clamp_u: BoolProperty(name='Clamp U', default=False)
+    clamp_v: BoolProperty(name='Clamp V', default=False)
+    no_lod: BoolProperty(name='No LOD', default=False)
+    publish: BoolProperty(name='Publish', default=False)
+    display: BoolProperty(name='Display', default=False)
+    frames: IntProperty(name='Frames', default=1, min=0, max=999)
+    fps: FloatProperty(name='FPS', default=15.0, min=0.0, max=120.0)
+    animation_mode: EnumProperty(
+        name='Animation Mode',
+        items=W3D_STAGE_ANIM_ITEMS,
+        default='LOOP')
+    pass_hint: EnumProperty(
+        name='Pass Hint',
+        items=W3D_PASS_HINT_ITEMS,
+        default='BASE_TEXTURE')
+    alpha_bitmap: PointerProperty(name='Alpha Bitmap', type=bpy.types.Image)
+
+
+class W3DShaderSettings(PropertyGroup):
+    blend_mode: IntProperty(name='Blend Mode', default=0, min=0)
+    custom_src: IntProperty(name='Source Blend', default=1, min=0)
+    custom_dest: IntProperty(name='Destination Blend', default=0, min=0)
+    write_z: BoolProperty(name='Write Z', default=True)
+    alpha_test: BoolProperty(name='Alpha Test', default=False)
+    pri_gradient: IntProperty(name='Primary Gradient', default=1, min=0)
+    sec_gradient: IntProperty(name='Secondary Gradient', default=0, min=0)
+    depth_compare: IntProperty(name='Depth Compare', default=3, min=0)
+    detail_color: IntProperty(name='Detail Color Func', default=0, min=0)
+    detail_alpha: IntProperty(name='Detail Alpha Func', default=0, min=0)
+
+
+class W3DMaterialPass(PropertyGroup):
+    name: StringProperty(name='Pass Name', default='Pass')
+    ambient: FloatVectorProperty(
+        name='Ambient',
+        subtype='COLOR',
+        size=4,
+        default=(1.0, 1.0, 1.0, 1.0),
+        min=0.0,
+        max=1.0)
+    diffuse: FloatVectorProperty(
+        name='Diffuse',
+        subtype='COLOR',
+        size=4,
+        default=(1.0, 1.0, 1.0, 1.0),
+        min=0.0,
+        max=1.0)
+    specular: FloatVectorProperty(
+        name='Specular',
+        subtype='COLOR',
+        size=3,
+        default=(0.0, 0.0, 0.0),
+        min=0.0,
+        max=1.0)
+    emissive: FloatVectorProperty(
+        name='Emissive',
+        subtype='COLOR',
+        size=3,
+        default=(0.0, 0.0, 0.0),
+        min=0.0,
+        max=1.0)
+    specular_to_diffuse: BoolProperty(name='Specular to Diffuse', default=False)
+    opacity: FloatProperty(name='Opacity', default=1.0, min=0.0, max=1.0)
+    translucency: FloatProperty(name='Translucency', default=0.0, min=0.0, max=1.0)
+    shininess: FloatProperty(name='Shininess', default=0.0, min=0.0, max=100.0)
+    uv_channel_stage0: IntProperty(name='Stage 0 UV Channel', default=1, min=1, max=99)
+    uv_channel_stage1: IntProperty(name='Stage 1 UV Channel', default=1, min=1, max=99)
+    stage0: PointerProperty(name='Stage 0', type=W3DStageSettings)
+    stage1: PointerProperty(name='Stage 1', type=W3DStageSettings)
+    shader: PointerProperty(name='Shader Settings', type=W3DShaderSettings)
+
+
+class W3DMaterialSettings(PropertyGroup):
+    passes: CollectionProperty(type=W3DMaterialPass)
+    active_pass_index: IntProperty(name='Active Pass', default=0, min=0)
+    material_type: EnumProperty(
+        name='Material Type',
+        items=[
+            ('SHADER_MATERIAL', 'Shader', 'Shader material.'),
+            ('VERTEX_MATERIAL', 'Vertex', 'Vertex material.'),
+            ('PRELIT_MATERIAL', 'Prelit', 'Prelit material.'),
+        ],
+        default='VERTEX_MATERIAL')
+    surface_type: EnumProperty(
+        name='Surface Type',
+        items=[
+            ('0', 'LightMetal', ''),
+            ('1', 'HeavyMetal', ''),
+            ('2', 'Water', ''),
+            ('3', 'Sand', ''),
+            ('4', 'Dirt', ''),
+            ('5', 'Mud', ''),
+            ('6', 'Grass', ''),
+            ('7', 'Wood', ''),
+            ('8', 'Concrete', ''),
+            ('9', 'Flesh', ''),
+            ('10', 'Rock', ''),
+            ('11', 'Snow', ''),
+            ('12', 'Ice', ''),
+            ('13', 'Default', ''),
+            ('14', 'Glass', ''),
+            ('15', 'Cloth', ''),
+            ('16', 'TiberiumField', ''),
+            ('17', 'FoliagePermeable', ''),
+            ('18', 'GlassPermeable', ''),
+            ('19', 'IcePermeable', ''),
+            ('20', 'ClothPermeable', ''),
+            ('21', 'Electrical', ''),
+            ('22', 'Flammable', ''),
+            ('23', 'Steam', ''),
+            ('24', 'ElectricalPermeable', ''),
+            ('25', 'FlammablePermeable', ''),
+            ('26', 'SteamPermeable', ''),
+            ('27', 'WaterPermeable', ''),
+            ('28', 'TiberiumWater', ''),
+            ('29', 'TiberiumWaterPermeable', ''),
+            ('30', 'UnderwaterDirt', ''),
+            ('31', 'UnderwaterTiberiumDirt', ''),
+        ],
+        default='13')
+    attributes: EnumProperty(
+        name='Attributes',
+        items=[
+            ('DEFAULT', 'Default', ''),
+            ('USE_DEPTH_CUE', 'Use Depth Cue', ''),
+            ('ARGB_EMISSIVE_ONLY', 'ARGB Emissive Only', ''),
+            ('COPY_SPECULAR_TO_DIFFUSE', 'Copy Specular To Diffuse', ''),
+            ('DEPTH_CUE_TO_ALPHA', 'Depth Cue To Alpha', ''),
+        ],
+        options={'ENUM_FLAG'})
+
+
+class W3DObjectSettings(PropertyGroup):
+    export_transform: BoolProperty(name='Export Transform', default=True)
+    export_geometry: BoolProperty(name='Export Geometry', default=True)
+    geometry_type: EnumProperty(
+        name='Geometry Type',
+        items=W3D_GEOMETRY_TYPE_ITEMS,
+        default='NORMAL')
+    static_sort_level: IntProperty(name='Static Sort Level', default=0, min=0, max=32)
+    screen_size: FloatProperty(name='Screen Size', default=1.0, min=0.0)
+    dazzle_name: EnumProperty(
+        name='Dazzle',
+        items=get_dazzle_enum_items,
+        default=0)
+    geom_hide: BoolProperty(name='Hide', default=False)
+    geom_two_sided: BoolProperty(name='Two Sided', default=False)
+    geom_shadow: BoolProperty(name='Shadow', default=False)
+    geom_vertex_alpha: BoolProperty(name='Vertex Alpha', default=False)
+    geom_z_normal: BoolProperty(name='Z Normal', default=False)
+    geom_shatter: BoolProperty(name='Shatter', default=False)
+    geom_tangents: BoolProperty(name='Tangents', default=False)
+    geom_keep_normals: BoolProperty(name='Keep Normals', default=False)
+    geom_prelit: BoolProperty(name='Prelit', default=False)
+    geom_always_dyn_light: BoolProperty(name='Always Dynamic Light', default=False)
+    coll_physical: BoolProperty(name='Physical Collision', default=False)
+    coll_projectile: BoolProperty(name='Projectile Collision', default=False)
+    coll_vis: BoolProperty(name='Vis Collision', default=False)
+    coll_camera: BoolProperty(name='Camera Collision', default=False)
+    coll_vehicle: BoolProperty(name='Vehicle Collision', default=False)
 
 
 ##########################################################################

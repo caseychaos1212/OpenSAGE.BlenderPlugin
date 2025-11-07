@@ -1,19 +1,48 @@
 # <pep8 compliant>
 # Written by Stephan Vedder and Michael Schnabel
 
+import os
+
 import bpy
 import bmesh
+import math
 from mathutils import Vector, Matrix
 from bpy_extras import node_shader_utils
 
 from io_mesh_w3d.common.structs.mesh import *
+from io_mesh_w3d.common.structs.mesh_structs.aabbtree import (
+    AABBTree,
+    AABBTreeHeader,
+    AABBTreeNode,
+    Children,
+    Polys,
+)
+from io_mesh_w3d.common.structs.mesh_structs.texture import Texture, TextureInfo
+from io_mesh_w3d.w3d.structs.mesh_structs.material_pass import TextureStage
 from io_mesh_w3d.common.utils.helpers import *
 from io_mesh_w3d.common.utils.material_export import *
+from io_mesh_w3d.common.utils.object_settings_bridge import (
+    should_export_geometry,
+    apply_object_settings_to_header,
+    is_normal_geometry,
+)
+from io_mesh_w3d.common.utils.material_settings_bridge import (
+    apply_material_settings_to_legacy,
+    snapshot_material_state,
+    restore_material_state,
+    apply_pass_to_material,
+)
 
 
 def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materials=False):
     mesh_structs = []
     used_textures = []
+    export_options = getattr(context, '_w3d_export_options', {}) or {}
+    smooth_normals = export_options.get('smooth_vertex_normals', True)
+    deduplicate = export_options.get('deduplicate_reference_meshes', False)
+    build_aabbtree = export_options.get('build_new_aabtree', False)
+    terrain_mode = export_options.get('terrain_mode', False)
+    seen_mesh_data = set()
 
     naming_error = False
     bone_names = [bone.name for bone in rig.pose.bones] if rig is not None else []
@@ -25,6 +54,34 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
     for mesh_object in get_objects('MESH'):
         if mesh_object.data.object_type != 'MESH':
             continue
+        if not should_export_geometry(mesh_object):
+            continue
+        if terrain_mode and is_normal_geometry(mesh_object):
+            context.warning(f"Skipping '{mesh_object.name}' – normal geometry is not exported in Terrain mode. Change its Geometry Type if needed.")
+            continue
+
+        source_object = mesh_object
+
+        if deduplicate:
+            data_key = getattr(source_object.data, 'original', source_object.data)
+            data_id = id(data_key)
+            if data_id in seen_mesh_data:
+                reporter = getattr(context, 'info', None)
+                if callable(reporter):
+                    reporter(f"Skipping duplicate mesh '{source_object.name}' (shared data)")
+                continue
+            seen_mesh_data.add(data_id)
+
+        if smooth_normals:
+            mesh_data = source_object.data
+            if mesh_data and hasattr(mesh_data, 'polygons'):
+                try:
+                    mesh_data.use_auto_smooth = True
+                    mesh_data.auto_smooth_angle = math.radians(180.0)
+                    for poly in mesh_data.polygons:
+                        poly.use_smooth = True
+                except AttributeError:
+                    pass
 
         if mesh_object.mode != 'OBJECT':
             bpy.ops.object.mode_set(mode='OBJECT')
@@ -35,17 +92,10 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
             container_name=container_name)
 
         header = mesh_struct.header
-        header.sort_level = mesh_object.data.sort_level
+        meta = apply_object_settings_to_header(mesh_object, header)
+        if header.sort_level == 0:
+            header.sort_level = mesh_object.data.sort_level
         mesh_struct.user_text = mesh_object.data.userText
-
-        if mesh_object.hide_get():
-            header.attrs |= GEOMETRY_TYPE_HIDDEN
-
-        if mesh_object.data.casts_shadow:
-            header.attrs |= GEOMETRY_TYPE_CAST_SHADOW
-
-        if mesh_object.data.two_sided:
-            header.attrs |= GEOMETRY_TYPE_TWO_SIDED
 
         mesh_object = mesh_object.evaluated_get(depsgraph)
         mesh = mesh_object.data
@@ -224,56 +274,95 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
 
         b_mesh.free()
 
-        for i, material in enumerate(mesh.materials):
-            mat_pass = MaterialPass()
+        texture_cache = {}
 
+        for i, material in enumerate(mesh.materials):
             if material is None:
                 context.warning(f'mesh \'{mesh_object.name}\' uses a invalid/empty material!')
                 continue
 
-            principled = node_shader_utils.PrincipledBSDFWrapper(material, is_readonly=True)
+            settings = getattr(material, 'w3d_material_settings', None)
+            pass_configs = list(settings.passes) if settings and settings.passes else [None]
+            original_state = snapshot_material_state(material) if settings and settings.passes else None
 
-            used_textures = get_used_textures(material, principled, used_textures)
+            try:
+                if not settings or not settings.passes:
+                    apply_material_settings_to_legacy(material)
 
-            if context.file_format == 'W3X' or (
-                    material.material_type == 'SHADER_MATERIAL' and not force_vertex_materials):
-                mat_pass.shader_material_ids = [i]
-                if i < len(tx_stages):
-                    mat_pass.tx_coords = tx_stages[i].tx_coords[0]
-                # FIX ME: ugly solution to export second uv map!
-                # How to deal with multiple materials aganist multiple UV maps in a mesh?
-                if len(mesh.materials) == 1 and len(tx_stages) == 2:
-                    mat_pass.tx_coords_2 = tx_stages[i + 1].tx_coords[0]
+                for pass_config in pass_configs:
+                    if pass_config is not None:
+                        apply_pass_to_material(material, settings, pass_config)
 
-                mesh_struct.shader_materials.append(
-                    retrieve_shader_material(context, material, principled))
+                    mat_pass = MaterialPass()
 
-            else:
-                shader = retrieve_shader(material)
-                mesh_struct.shaders.append(shader)
-                mat_pass.shader_ids = [i]
-                mat_pass.vertex_material_ids = [i]
+                    principled = node_shader_utils.PrincipledBSDFWrapper(material, is_readonly=True)
 
-                mesh_struct.vert_materials.append(retrieve_vertex_material(material, principled))
+                    used_textures = get_used_textures(material, principled, used_textures)
 
-                base_col_tex = principled.base_color_texture
-                if base_col_tex is not None and base_col_tex.image is not None:
-                    info = TextureInfo()
-                    img = base_col_tex.image
-                    filepath = os.path.basename(img.filepath)
-                    if filepath == '':
-                        filepath = img.name
-                    tex = Texture(
-                        id=img.name,
-                        file=filepath,
-                        texture_info=info)
-                    mesh_struct.textures.append(tex)
-                    shader.texturing = 1
+                    custom_stage = False
 
-                    if i < len(tx_stages):
-                        mat_pass.tx_stages.append(tx_stages[i])
+                    if context.file_format == 'W3X' or (
+                            material.material_type == 'SHADER_MATERIAL' and not force_vertex_materials):
+                        mat_pass.shader_material_ids = [len(mesh_struct.shader_materials)]
+                        if pass_config is None and i < len(tx_stages):
+                            mat_pass.tx_coords = tx_stages[i].tx_coords[0]
+                            if len(mesh.materials) == 1 and len(tx_stages) == 2:
+                                mat_pass.tx_coords_2 = tx_stages[i + 1].tx_coords[0]
 
-            mesh_struct.material_passes.append(mat_pass)
+                        mesh_struct.shader_materials.append(
+                            retrieve_shader_material(context, material, principled))
+
+                    else:
+                        shader = retrieve_shader(material)
+                        mesh_struct.shaders.append(shader)
+                        mat_pass.shader_ids = [len(mesh_struct.shaders) - 1]
+                        mat_pass.vertex_material_ids = [len(mesh_struct.vert_materials)]
+
+                        mesh_struct.vert_materials.append(retrieve_vertex_material(material, principled))
+
+                        if pass_config is None:
+                            base_col_tex = principled.base_color_texture
+                            if base_col_tex is not None and base_col_tex.image is not None:
+                                info = TextureInfo()
+                                img = base_col_tex.image
+                                filepath = os.path.basename(img.filepath)
+                                if filepath == '':
+                                    filepath = img.name
+                                tex = Texture(
+                                    id=img.name,
+                                    file=filepath,
+                                    texture_info=info)
+                                mesh_struct.textures.append(tex)
+                                shader.texturing = 1
+
+                                if i < len(tx_stages):
+                                    mat_pass.tx_stages.append(tx_stages[i])
+
+                    if pass_config is not None:
+                        custom_stage |= add_stage_from_settings(
+                            pass_config.stage0,
+                            pass_config.uv_channel_stage0,
+                            tx_stages,
+                            mesh_struct,
+                            texture_cache,
+                            mat_pass)
+                        custom_stage |= add_stage_from_settings(
+                            pass_config.stage1,
+                            pass_config.uv_channel_stage1,
+                            tx_stages,
+                            mesh_struct,
+                            texture_cache,
+                            mat_pass)
+                        if custom_stage and context.file_format != 'W3X' and mesh_struct.shaders:
+                            mesh_struct.shaders[-1].texturing = 1
+
+                    mesh_struct.material_passes.append(mat_pass)
+            finally:
+                if original_state is not None:
+                    restore_material_state(material, original_state)
+
+        if build_aabbtree:
+            mesh_struct.aabbtree = build_simple_aabb_tree(mesh_struct)
 
         for layer in mesh.vertex_colors:
             if '_' in layer.name:
@@ -305,17 +394,18 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
                 context.warning(f'mesh \'{mesh_object.name }\' is rigged and thus does not support any constraints!')
 
         else:
-            if len(mesh_object.constraints) > 1:
-                context.warning(
-                    f'mesh \'{mesh_object.name}\' has multiple constraints applied, only \'Copy Rotation\' OR \'Damped Track\' are supported!')
-            for constraint in mesh_object.constraints:
-                if constraint.name == 'Copy Rotation':
-                    header.attrs |= GEOMETRY_TYPE_CAMERA_ORIENTED
-                    break
-                if constraint.name == 'Damped Track':
-                    header.attrs |= GEOMETRY_TYPE_CAMERA_ALIGNED
-                    break
-                context.warning(f'mesh \'{mesh_object.name}\' constraint \'{constraint.name}\' is not supported!')
+            if not meta.get('handled_orientation'):
+                if len(mesh_object.constraints) > 1:
+                    context.warning(
+                        f'mesh \'{mesh_object.name}\' has multiple constraints applied, only \'Copy Rotation\' OR \'Damped Track\' are supported!')
+                for constraint in mesh_object.constraints:
+                    if constraint.name == 'Copy Rotation':
+                        header.attrs |= GEOMETRY_TYPE_CAMERA_ORIENTED
+                        break
+                    if constraint.name == 'Damped Track':
+                        header.attrs |= GEOMETRY_TYPE_CAMERA_ALIGNED
+                        break
+                    context.warning(f'mesh \'{mesh_object.name}\' constraint \'{constraint.name}\' is not supported!')
 
         if mesh_object.name in bone_names:
             if not (mesh_struct.is_skin() or mesh_object.parent_type ==
@@ -368,6 +458,94 @@ def prepare_bmesh(context, mesh):
     b_mesh.to_mesh(mesh)
     mesh.update()
     return b_mesh
+
+
+def build_simple_aabb_tree(mesh_struct):
+    tri_count = len(mesh_struct.triangles)
+    if tri_count == 0 or not mesh_struct.verts:
+        return None
+
+    min_corner = Vector((float('inf'), float('inf'), float('inf')))
+    max_corner = Vector((float('-inf'), float('-inf'), float('-inf')))
+
+    for vert in mesh_struct.verts:
+        min_corner.x = min(min_corner.x, vert.x)
+        min_corner.y = min(min_corner.y, vert.y)
+        min_corner.z = min(min_corner.z, vert.z)
+        max_corner.x = max(max_corner.x, vert.x)
+        max_corner.y = max(max_corner.y, vert.y)
+        max_corner.z = max(max_corner.z, vert.z)
+
+    node = AABBTreeNode(
+        min=min_corner,
+        max=max_corner,
+        children=Children(front=-1, back=-1),
+        polys=Polys(begin=0, count=tri_count))
+    header = AABBTreeHeader(node_count=1, poly_count=tri_count)
+    tree = AABBTree(
+        header=header,
+        poly_indices=list(range(tri_count)),
+        nodes=[node])
+    return tree
+
+
+def add_stage_from_settings(stage_settings, uv_channel, tx_templates, mesh_struct, cache, mat_pass):
+    if stage_settings is None or not stage_settings.enabled or stage_settings.texture is None:
+        return False
+
+    tex_index = ensure_texture_slot(stage_settings, mesh_struct, cache)
+    if tex_index is None:
+        return False
+
+    stage = TextureStage(
+        tx_ids=[[tex_index]],
+        tx_coords=copy_uv_coords(tx_templates, uv_channel))
+
+    mat_pass.tx_stages.append(stage)
+    return True
+
+
+def ensure_texture_slot(stage_settings, mesh_struct, cache):
+    image = stage_settings.texture
+    if image is None:
+        return None
+    frame_count = int(stage_settings.frames) if stage_settings.frames is not None else 0
+    frame_rate = float(stage_settings.fps) if stage_settings.fps is not None else 0.0
+    anim_mode = stage_settings.animation_mode or 'LOOP'
+    key = (image.name, frame_count, frame_rate, anim_mode)
+    if key in cache:
+        return cache[key]
+
+    filepath = os.path.basename(image.filepath) if image.filepath else image.name
+    info = TextureInfo(
+        attributes=0,
+        animation_type=ANIM_MODE_TO_INT.get(anim_mode, 0),
+        frame_count=frame_count,
+        frame_rate=frame_rate)
+
+    texture = Texture(
+        id=image.name,
+        file=filepath,
+        texture_info=info)
+
+    mesh_struct.textures.append(texture)
+    index = len(mesh_struct.textures) - 1
+    cache[key] = index
+    return index
+
+
+def copy_uv_coords(tx_templates, uv_channel):
+    if not tx_templates:
+        return []
+    if uv_channel is None or uv_channel <= 0:
+        index = 0
+    else:
+        index = max(0, min(len(tx_templates) - 1, uv_channel - 1))
+    template = tx_templates[index]
+    if not template.tx_coords:
+        return []
+    coords = [vec.copy() for vec in template.tx_coords[0]]
+    return [coords]
 
 
 def find_bone_index(hierarchy, mesh_object, group):
@@ -451,3 +629,9 @@ def calculate_mesh_sphere(mesh):
     radius = z.length
 
     return validate_all_points_inside_sphere(center, radius, vertices)
+ANIM_MODE_TO_INT = {
+    'LOOP': 0,
+    'PINGPONG': 1,
+    'ONCE': 2,
+    'MANUAL': 3,
+}
