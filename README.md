@@ -1,4 +1,4 @@
-![OpenSAGE](/art/opensage-logo.png)
+![OpenW3D](/art/opensage-logo.png)
 ============================================================
 
 [![Build Status](https://github.com/OpenSAGE/OpenSAGE.BlenderPlugin/actions/workflows/ci.yml/badge.svg)](https://github.com/OpenSAGE/OpenSAGE.BlenderPlugin/actions/workflows/ci.yml)
@@ -7,8 +7,8 @@
 
 ![Sample](/art/AotR_Umbar_Buildings.jpg)
 
-**OpenSAGE.BlenderPlugin**: a free, open source blender plugin for the [Westwood](https://de.wikipedia.org/wiki/Westwood_Studios) 3D
-format used in Command & Conquer™: Generals and other RTS titles from Westwood Studios and EA Pacific.
+**OpenW3D Blender Plugin** (formerly **OpenSAGE.BlenderPlugin**): a free, open source Blender plugin for the [Westwood](https://de.wikipedia.org/wiki/Westwood_Studios) 3D
+format used in Command & Conquer™: Generals and other RTS titles from Westwood Studios and EA Pacific. The project continues to be powered by the original OpenSAGE contributors, and we remain grateful for their groundwork.
 
 ## Installing and activating
 
@@ -20,7 +20,7 @@ Please see [Setting up for development](https://github.com/OpenSAGE/OpenSAGE.Ble
 
 ## Note
 
-The plugin is still in beta and the behaviour may change between releases. Also bugs might still occur, which we'll try to fix as soon as possible. So feel free to report bugs and issues in the #w3d-blender-plugin channel on [OpenSAGE Discord](https://discord.gg/G2FhZUT). Also see [Troubleshoting](https://github.com/OpenSAGE/OpenSAGE.BlenderPlugin/wiki/Troubleshooting) for more information.
+The plugin is still in beta and the behaviour may change between releases. Also bugs might still occur, which we'll try to fix as soon as possible. So feel free to report bugs and issues in the #w3d-blender-plugin channel on the [OpenW3D / OpenSAGE Discord](https://discord.gg/G2FhZUT). Also see [Troubleshoting](https://github.com/OpenSAGE/OpenSAGE.BlenderPlugin/wiki/Troubleshooting) for more information.
 
 ## Legal disclaimers
 
@@ -32,5 +32,5 @@ The plugin is still in beta and the behaviour may change between releases. Also 
 
 ## Community
 
-We have a growing [OpenSAGE Discord](https://discord.gg/G2FhZUT) community. If you have questions about the project or can't get it working,
+We have a growing [OpenW3D community on the OpenSAGE Discord](https://discord.gg/G2FhZUT). If you have questions about the project or can't get it working,
 there's usually someone there who can help out.

@@ -210,6 +210,14 @@ class W3DMaterialPass(PropertyGroup):
 class W3DMaterialSettings(PropertyGroup):
     passes: CollectionProperty(type=W3DMaterialPass)
     active_pass_index: IntProperty(name='Active Pass', default=0, min=0)
+    ui_pass_section: EnumProperty(
+        name='Pass Tab',
+        items=[
+            ('VERTEX', 'Vertex Material', 'Show vertex material properties'),
+            ('SHADER', 'Shader', 'Show shader properties'),
+            ('TEXTURES', 'Textures', 'Show texture stage properties'),
+        ],
+        default='VERTEX')
     material_type: EnumProperty(
         name='Material Type',
         items=[

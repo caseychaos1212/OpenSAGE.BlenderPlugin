@@ -78,12 +78,12 @@ W3D_PRESETS = [
 
 W3D_PRESET_ENUM = [(preset['id'], preset['name'], preset['description']) for preset in W3D_PRESETS]
 
-VERSION = (0, 7, 1)
+VERSION = (0, 8, 0)
 
 bl_info = {
     'name': 'Import/Export Westwood W3D Format (.w3d/.w3x)',
-    'author': 'OpenSage Developers',
-    'version': (0, 7, 1),
+    'author': 'OpenW3D Team (built on the work of the OpenSAGE developers)',
+    'version': (0, 8, 0),
     "blender": (2, 90, 0),
     'location': 'File > Import/Export > Westwood W3D (.w3d/.w3x)',
     'description': 'Import or Export the Westwood W3D-Format (.w3d/.w3x)',
@@ -1009,7 +1009,7 @@ class BONE_PROPERTIES_PANEL_PT_w3d(Panel):
 
 
 class MATERIAL_PROPERTIES_PANEL_PT_w3d(Panel):
-    bl_label = 'W3D Properties'
+    bl_label = 'OpenW3D Material'
     bl_space_type = 'PROPERTIES'
     bl_region_type = 'WINDOW'
     bl_context = 'material'
@@ -1029,41 +1029,66 @@ class MATERIAL_PROPERTIES_PANEL_PT_w3d(Panel):
         layout.use_property_split = True
 
         overview = layout.box()
-        overview.label(text='Material Overview')
-        overview.prop(settings, 'material_type')
-        overview.prop(settings, 'surface_type')
-        overview.prop(settings, 'attributes')
+        overview.label(text='Material Surface Type')
+        overview.prop(settings, 'material_type', text='Material Type')
+        overview.prop(settings, 'surface_type', text='Surface Type')
+        overview.prop(settings, 'attributes', text='Attributes')
+        obj_settings = getattr(obj, 'w3d_object_settings', None) if obj else None
+        if obj_settings:
+            overview.prop(obj_settings, 'static_sort_level', text='Static Sort Level')
 
         pass_box = layout.box()
-        pass_box.label(text='Pass Stack')
-        row = pass_box.row()
-        row.template_list('W3D_UL_material_passes', '', settings, 'passes', settings, 'active_pass_index', rows=2)
-        col = row.column(align=True)
-        col.operator('w3d.material_pass_add', icon='ADD', text='')
-        col.operator('w3d.material_pass_remove', icon='REMOVE', text='')
+        pass_box.label(text='Material Pass Count')
+        summary = pass_box.row()
+        summary.label(text=f'Current Pass Count: {len(settings.passes)}')
+        controls = pass_box.row(align=True)
+        controls.operator('w3d.material_pass_add', icon='ADD', text='Add Pass')
+        remove_row = controls.row(align=True)
+        remove_row.enabled = bool(settings.passes)
+        remove_row.operator('w3d.material_pass_remove', icon='REMOVE', text='Remove Pass')
+        list_row = pass_box.row()
+        list_row.template_list('W3D_UL_material_passes', '', settings, 'passes', settings, 'active_pass_index', rows=2)
+        col = list_row.column(align=True)
         move_up = col.operator('w3d.material_pass_move', icon='TRIA_UP', text='')
         move_up.direction = 'UP'
         move_down = col.operator('w3d.material_pass_move', icon='TRIA_DOWN', text='')
         move_down.direction = 'DOWN'
 
-        if settings.passes:
-            index = min(settings.active_pass_index, len(settings.passes) - 1)
-            active_pass = settings.passes[index]
-            details = layout.box()
-            details.label(text=f'Pass {index + 1}')
-            details.prop(active_pass, 'name', text='Name')
-            details.prop(active_pass, 'ambient')
-            details.prop(active_pass, 'diffuse')
-            details.prop(active_pass, 'specular')
-            details.prop(active_pass, 'emissive')
-            details.prop(active_pass, 'specular_to_diffuse')
-            details.prop(active_pass, 'opacity')
-            details.prop(active_pass, 'translucency')
-            details.prop(active_pass, 'shininess')
-            details.prop(active_pass, 'uv_channel_stage0')
-            details.prop(active_pass, 'uv_channel_stage1')
+        if not settings.passes:
+            info = layout.box()
+            info.label(text='Add a pass to begin authoring materials.', icon='INFO')
+            return
 
-            shader_box = details.box()
+        index = min(settings.active_pass_index, len(settings.passes) - 1)
+        active_pass = settings.passes[index]
+        details = layout.box()
+        details.label(text=f'Pass {index + 1}')
+
+        tab_row = details.row(align=True)
+        tab_row.prop(settings, 'ui_pass_section', expand=True)
+        details.separator()
+
+        def draw_vertex_tab(container):
+            vertex = container.column()
+            vertex.prop(active_pass, 'name', text='Pass Name')
+            color_box = vertex.box()
+            color_box.label(text='Vertex Material')
+            color_box.prop(active_pass, 'ambient')
+            color_box.prop(active_pass, 'diffuse')
+            color_box.prop(active_pass, 'specular')
+            color_box.prop(active_pass, 'emissive')
+            color_box.prop(active_pass, 'specular_to_diffuse')
+            color_box.prop(active_pass, 'opacity')
+            color_box.prop(active_pass, 'translucency')
+            color_box.prop(active_pass, 'shininess')
+
+            mapping = vertex.box()
+            mapping.label(text='Stage UV Channels')
+            mapping.prop(active_pass, 'uv_channel_stage0', text='Stage 0')
+            mapping.prop(active_pass, 'uv_channel_stage1', text='Stage 1')
+
+        def draw_shader_tab(container):
+            shader_box = container.box()
             shader_box.label(text='Shader')
             shader_box.prop(active_pass.shader, 'blend_mode')
             shader_box.prop(active_pass.shader, 'custom_src')
@@ -1076,25 +1101,33 @@ class MATERIAL_PROPERTIES_PANEL_PT_w3d(Panel):
             shader_box.prop(active_pass.shader, 'detail_color')
             shader_box.prop(active_pass.shader, 'detail_alpha')
 
-            def draw_stage(stage_settings, label):
-                stage_box = details.box()
-                stage_box.label(text=label)
-                stage_box.prop(stage_settings, 'enabled')
-                stage_box.prop(stage_settings, 'texture')
-                stage_box.prop(stage_settings, 'alpha_bitmap')
-                stage_box.prop(stage_settings, 'clamp_u')
-                stage_box.prop(stage_settings, 'clamp_v')
-                stage_box.prop(stage_settings, 'no_lod')
-                toggle_row = stage_box.row(align=True)
-                toggle_row.prop(stage_settings, 'publish')
-                toggle_row.prop(stage_settings, 'display')
-                stage_box.prop(stage_settings, 'frames')
-                stage_box.prop(stage_settings, 'fps')
-                stage_box.prop(stage_settings, 'animation_mode')
-                stage_box.prop(stage_settings, 'pass_hint')
+        def draw_stage(container, stage_settings, label):
+            stage_box = container.box()
+            header = stage_box.row(align=True)
+            header.prop(stage_settings, 'enabled', text='', toggle=True)
+            header.label(text=label)
+            stage_box.prop(stage_settings, 'texture')
+            stage_box.prop(stage_settings, 'alpha_bitmap', text='Alpha Bitmap')
+            clamp_row = stage_box.row(align=True)
+            clamp_row.prop(stage_settings, 'clamp_u', toggle=True)
+            clamp_row.prop(stage_settings, 'clamp_v', toggle=True)
+            clamp_row.prop(stage_settings, 'no_lod', toggle=True)
+            publish_row = stage_box.row(align=True)
+            publish_row.prop(stage_settings, 'publish', toggle=True)
+            publish_row.prop(stage_settings, 'display', toggle=True)
+            stage_box.prop(stage_settings, 'frames')
+            stage_box.prop(stage_settings, 'fps')
+            stage_box.prop(stage_settings, 'animation_mode')
+            stage_box.prop(stage_settings, 'pass_hint')
 
-            draw_stage(active_pass.stage0, 'Stage 0')
-            draw_stage(active_pass.stage1, 'Stage 1')
+        if settings.ui_pass_section == 'VERTEX':
+            draw_vertex_tab(details)
+        elif settings.ui_pass_section == 'SHADER':
+            draw_shader_tab(details)
+        else:
+            textures = details.column()
+            draw_stage(textures, active_pass.stage0, 'Stage 0 Texture')
+            draw_stage(textures, active_pass.stage1, 'Stage 1 Texture')
 
         legacy = layout.box()
         legacy.label(text='Legacy Properties', icon='INFO')
