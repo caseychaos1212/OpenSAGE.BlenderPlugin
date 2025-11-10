@@ -993,9 +993,6 @@ class MESH_PROPERTIES_PANEL_PT_w3d(Panel):
             layout.label(text='Set the mesh Object Type to DAZZLE for Dazzle geometry.', icon=warning_icon)
         if settings.geometry_type == 'BOX' and mesh.object_type != 'BOX':
             layout.label(text='Geometry Type is BOX but the mesh Object Type is not BOX.', icon=warning_icon)
-        if (settings.coll_physical or settings.coll_projectile or settings.coll_vis or
-                settings.coll_camera or settings.coll_vehicle) and mesh.object_type != 'BOX':
-            layout.label(text='Collision flags only take effect on meshes with Object Type BOX.', icon=warning_icon)
 
 
 class BONE_PROPERTIES_PANEL_PT_w3d(Panel):

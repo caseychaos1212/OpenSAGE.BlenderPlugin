@@ -84,7 +84,7 @@ def apply_pass_to_material(material, settings, pass_settings):
 
     material.ambient = tuple(pass_settings.ambient)
     material.specular = tuple(pass_settings.specular)
-    material.diffuse_color = pass_settings.diffuse[:3]
+    material.diffuse_color = tuple(pass_settings.diffuse)
     material.use_nodes = True
 
     material.translucency = pass_settings.translucency

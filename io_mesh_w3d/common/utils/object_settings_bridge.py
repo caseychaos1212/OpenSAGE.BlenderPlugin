@@ -8,6 +8,12 @@ from io_mesh_w3d.common.structs.mesh import (
     GEOMETRY_TYPE_CAST_SHADOW,
     GEOMETRY_TYPE_CAMERA_ORIENTED,
     GEOMETRY_TYPE_CAMERA_ALIGNED,
+    GEOMETRY_COLLISION_TYPE_MASK,
+    GEOMETRY_COLLISION_TYPE_PHYSICAL,
+    GEOMETRY_COLLISION_TYPE_PROJECTILE,
+    GEOMETRY_COLLISION_TYPE_VIS,
+    GEOMETRY_COLLISION_TYPE_CAMERA,
+    GEOMETRY_COLLISION_TYPE_VEHICLE,
 )
 
 
@@ -71,6 +77,21 @@ def apply_object_settings_to_header(obj, header):
         header.attrs |= geo_attr
         result['handled_orientation'] = True
 
+    collision_bits = 0
+    if settings.coll_physical:
+        collision_bits |= GEOMETRY_COLLISION_TYPE_PHYSICAL
+    if settings.coll_projectile:
+        collision_bits |= GEOMETRY_COLLISION_TYPE_PROJECTILE
+    if settings.coll_vis:
+        collision_bits |= GEOMETRY_COLLISION_TYPE_VIS
+    if settings.coll_camera:
+        collision_bits |= GEOMETRY_COLLISION_TYPE_CAMERA
+    if settings.coll_vehicle:
+        collision_bits |= GEOMETRY_COLLISION_TYPE_VEHICLE
+
+    header.attrs &= ~GEOMETRY_COLLISION_TYPE_MASK
+    header.attrs |= collision_bits
+
     return result
 
 
@@ -99,6 +120,13 @@ def populate_object_settings_from_mesh(obj, mesh_struct):
         settings.geometry_type = 'CAM_PARAL'
     else:
         settings.geometry_type = 'NORMAL'
+
+    attrs = mesh_struct.header.attrs
+    settings.coll_physical = bool(attrs & GEOMETRY_COLLISION_TYPE_PHYSICAL)
+    settings.coll_projectile = bool(attrs & GEOMETRY_COLLISION_TYPE_PROJECTILE)
+    settings.coll_vis = bool(attrs & GEOMETRY_COLLISION_TYPE_VIS)
+    settings.coll_camera = bool(attrs & GEOMETRY_COLLISION_TYPE_CAMERA)
+    settings.coll_vehicle = bool(attrs & GEOMETRY_COLLISION_TYPE_VEHICLE)
 
 
 def populate_object_settings_for_dazzle(obj, dazzle_type):

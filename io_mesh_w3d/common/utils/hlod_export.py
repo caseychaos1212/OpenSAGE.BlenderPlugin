@@ -8,7 +8,6 @@ from io_mesh_w3d.common.structs.hlod import *
 from io_mesh_w3d.common.utils.object_settings_bridge import (
     get_screen_size,
     should_export_geometry,
-    is_normal_geometry,
 )
 
 
@@ -16,12 +15,7 @@ screen_sizes = [MAX_SCREEN_SIZE, 1.0, 0.3, 0.03]
 
 
 def create_lod_array(meshes, hierarchy, container_name, lod_arrays):
-    options = getattr(bpy.context, '_w3d_export_options', {}) or {}
-    terrain_mode = options.get('terrain_mode', False)
-    filtered_meshes = [
-        mesh for mesh in meshes
-        if should_export_geometry(mesh) and (not terrain_mode or not is_normal_geometry(mesh))
-    ]
+    filtered_meshes = [mesh for mesh in meshes if should_export_geometry(mesh)]
     if not filtered_meshes:
         return lod_arrays
 
