@@ -2,7 +2,7 @@ OpenW3D Fork of OpenSAGE.BlenderPlugin
 ============================================================
 
 
-**OpenW3D Blender Plugin** (formerly **OpenSAGE.BlenderPlugin**): a free, open source Blender plugin for the [Westwood](https://de.wikipedia.org/wiki/Westwood_Studios) 3D
+**OpenW3D Blender Plugin** (fork of **OpenSAGE.BlenderPlugin**): a free, open source Blender plugin for the [Westwood](https://de.wikipedia.org/wiki/Westwood_Studios) 3D
 format used in Command & Conquer™: Renegade and other RTS titles from Westwood Studios and EA Pacific. The project is a fork from the OpenSAGE contributors, and we remain grateful for their groundwork.
 
 ## Installing and activating
