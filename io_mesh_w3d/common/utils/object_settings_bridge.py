@@ -2,6 +2,8 @@
 # Helper utilities to translate between Blender W3D object settings
 # and the legacy exporter/importer data structures.
 
+import bpy
+
 from io_mesh_w3d.common.structs.mesh import (
     GEOMETRY_TYPE_HIDDEN,
     GEOMETRY_TYPE_TWO_SIDED,
@@ -22,6 +24,75 @@ GEOMETRY_ATTR_MAP = {
     'CAM_PARAL': GEOMETRY_TYPE_CAMERA_ALIGNED,
     'CAM_Z_ORIENT': GEOMETRY_TYPE_CAMERA_ORIENTED,
 }
+
+_REN_GEOMETRY_TO_OBJECT_TYPE = {
+    'DAZZLE': 'DAZZLE',
+    'AABOX': 'BOX',
+    'OBBOX': 'BOX',
+}
+_REN_ALLOWED_TYPES = {'MESH', 'BOX', 'DAZZLE'}
+
+
+def _get_scene(context=None, scene=None, obj=None):
+    if scene is not None:
+        return scene
+    if context is not None and getattr(context, 'scene', None) is not None:
+        return context.scene
+    if obj is not None:
+        for candidate in bpy.data.scenes:
+            try:
+                if candidate.objects.get(obj.name) is not None:
+                    return candidate
+            except Exception:
+                continue
+    ctx = getattr(bpy, 'context', None)
+    if ctx is not None:
+        return getattr(ctx, 'scene', None)
+    return None
+
+
+def _geometry_to_mesh_type(geometry_type):
+    return _REN_GEOMETRY_TO_OBJECT_TYPE.get(geometry_type, 'MESH')
+
+
+def is_renegade_workflow_enabled(scene=None, context=None, obj=None):
+    target_scene = _get_scene(context=context, scene=scene, obj=obj)
+    if target_scene is None:
+        return False
+    settings = getattr(target_scene, 'w3d_scene_settings', None)
+    if settings is None:
+        return False
+    return bool(getattr(settings, 'use_renegade_workflow', False))
+
+
+def sync_object_type_from_settings(obj, context=None, scene=None):
+    if obj is None or obj.type != 'MESH':
+        return False
+    settings = get_object_settings(obj)
+    if settings is None:
+        return False
+    if not is_renegade_workflow_enabled(context=context, scene=scene, obj=obj):
+        return False
+    mesh = getattr(obj, 'data', None)
+    if mesh is None or not hasattr(mesh, 'object_type'):
+        return False
+    if mesh.object_type not in _REN_ALLOWED_TYPES:
+        return False
+    target_type = _geometry_to_mesh_type(settings.geometry_type)
+    if target_type and mesh.object_type != target_type:
+        mesh.object_type = target_type
+        return True
+    return False
+
+
+def sync_scene_object_types(scene=None, context=None):
+    target_scene = _get_scene(context=context, scene=scene)
+    if target_scene is None:
+        return
+    if not is_renegade_workflow_enabled(scene=target_scene):
+        return
+    for obj in target_scene.objects:
+        sync_object_type_from_settings(obj, scene=target_scene)
 
 
 def get_object_settings(obj):

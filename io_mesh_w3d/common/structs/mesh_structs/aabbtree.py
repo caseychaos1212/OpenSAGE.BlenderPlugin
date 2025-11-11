@@ -78,12 +78,16 @@ class AABBTreeNode:
 
     @staticmethod
     def read(io_stream):
-        node = AABBTreeNode(
-            min=read_vector(io_stream),
-            max=read_vector(io_stream))
-        node.children = Children(
-            front=read_long(io_stream),
-            back=read_long(io_stream))
+        min_vec = read_vector(io_stream)
+        max_vec = read_vector(io_stream)
+        front_value = read_ulong(io_stream)
+        back_value = read_ulong(io_stream)
+
+        if front_value < 0 or (front_value & 0x80000000):
+            begin = front_value & 0x7FFFFFFF
+            node = AABBTreeNode(min=min_vec, max=max_vec, polys=Polys(begin=begin, count=back_value))
+        else:
+            node = AABBTreeNode(min=min_vec, max=max_vec, children=Children(front=front_value, back=back_value))
         return node
 
     @staticmethod
@@ -93,8 +97,14 @@ class AABBTreeNode:
     def write(self, io_stream):
         write_vector(self.min, io_stream)
         write_vector(self.max, io_stream)
-        write_long(self.children.front, io_stream)
-        write_long(self.children.back, io_stream)
+        if self.polys is not None:
+            write_ulong(self.polys.begin | 0x80000000, io_stream)
+            write_ulong(self.polys.count, io_stream)
+        else:
+            front = self.children.front if self.children else -1
+            back = self.children.back if self.children else -1
+            write_ulong(front & 0xFFFFFFFF, io_stream)
+            write_ulong(back & 0xFFFFFFFF, io_stream)
 
     @staticmethod
     def parse(xml_node):

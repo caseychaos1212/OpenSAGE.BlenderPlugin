@@ -39,7 +39,8 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
     export_options = getattr(context, '_w3d_export_options', {}) or {}
     smooth_normals = export_options.get('smooth_vertex_normals', True)
     deduplicate = export_options.get('deduplicate_reference_meshes', False)
-    build_aabbtree = export_options.get('build_new_aabtree', False)
+    force_full = export_options.get('renegade_workflow', False)
+    build_aabbtree = export_options.get('build_new_aabtree', True) or force_full
     seen_mesh_data = set()
 
     naming_error = False
@@ -364,7 +365,7 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
                         restore_material_state(material, original_state)
 
             if build_aabbtree:
-                mesh_struct.aabbtree = build_simple_aabb_tree(mesh_struct)
+                mesh_struct.aabbtree = build_aabb_tree(mesh_struct)
 
             for layer in mesh.vertex_colors:
                 if '_' in layer.name:
@@ -465,33 +466,93 @@ def prepare_bmesh(context, mesh):
     return b_mesh
 
 
-def build_simple_aabb_tree(mesh_struct):
-    tri_count = len(mesh_struct.triangles)
-    if tri_count == 0 or not mesh_struct.verts:
+def build_aabb_tree(mesh_struct, max_polys_per_leaf=4):
+    tris = mesh_struct.triangles or []
+    verts = mesh_struct.verts or []
+    if not tris or not verts:
         return None
 
-    min_corner = Vector((float('inf'), float('inf'), float('inf')))
-    max_corner = Vector((float('-inf'), float('-inf'), float('-inf')))
+    def tri_bounds(indices):
+        min_corner = Vector((float('inf'), float('inf'), float('inf')))
+        max_corner = Vector((float('-inf'), float('-inf'), float('-inf')))
+        for tri_idx in indices:
+            tri = tris[tri_idx]
+            for vert_id in tri.vert_ids:
+                vert = verts[vert_id]
+                min_corner.x = min(min_corner.x, vert.x)
+                min_corner.y = min(min_corner.y, vert.y)
+                min_corner.z = min(min_corner.z, vert.z)
+                max_corner.x = max(max_corner.x, vert.x)
+                max_corner.y = max(max_corner.y, vert.y)
+                max_corner.z = max(max_corner.z, vert.z)
+        return min_corner, max_corner
 
-    for vert in mesh_struct.verts:
-        min_corner.x = min(min_corner.x, vert.x)
-        min_corner.y = min(min_corner.y, vert.y)
-        min_corner.z = min(min_corner.z, vert.z)
-        max_corner.x = max(max_corner.x, vert.x)
-        max_corner.y = max(max_corner.y, vert.y)
-        max_corner.z = max(max_corner.z, vert.z)
+    class _Node:
+        __slots__ = ('indices', 'front', 'back', 'min', 'max')
 
-    node = AABBTreeNode(
-        min=min_corner,
-        max=max_corner,
-        children=Children(front=-1, back=-1),
-        polys=Polys(begin=0, count=tri_count))
-    header = AABBTreeHeader(node_count=1, poly_count=tri_count)
-    tree = AABBTree(
-        header=header,
-        poly_indices=list(range(tri_count)),
-        nodes=[node])
-    return tree
+        def __init__(self, indices):
+            self.indices = indices
+            self.front = None
+            self.back = None
+            self.min = Vector((0.0, 0.0, 0.0))
+            self.max = Vector((0.0, 0.0, 0.0))
+
+    def build(indices):
+        node = _Node(indices)
+        node.min, node.max = tri_bounds(indices)
+        if len(indices) <= max_polys_per_leaf:
+            return node
+        extent = node.max - node.min
+        axis = 0
+        if extent.y > extent.x and extent.y >= extent.z:
+            axis = 1
+        elif extent.z > extent.x and extent.z >= extent.y:
+            axis = 2
+        centroids = []
+        for idx in indices:
+            tri = tris[idx]
+            cx = sum(verts[vid][axis] for vid in tri.vert_ids) / 3.0
+            centroids.append((cx, idx))
+        centroids.sort(key=lambda item: item[0])
+        mid = len(centroids) // 2
+        if mid == 0 or mid == len(centroids):
+            return node
+        left_indices = [idx for _, idx in centroids[:mid]]
+        right_indices = [idx for _, idx in centroids[mid:]]
+        if not left_indices or not right_indices:
+            return node
+        node.front = build(left_indices)
+        node.back = build(right_indices)
+        node.indices = None
+        return node
+
+    root = build(list(range(len(tris))))
+
+    nodes = []
+    poly_indices = []
+
+    def flatten(node):
+        index = len(nodes)
+        nodes.append(None)
+        if node.front is None or node.back is None:
+            begin = len(poly_indices)
+            poly_indices.extend(node.indices or [])
+            nodes[index] = AABBTreeNode(
+                min=node.min,
+                max=node.max,
+                polys=Polys(begin=begin, count=len(node.indices or [])))
+        else:
+            front_index = flatten(node.front)
+            back_index = flatten(node.back)
+            nodes[index] = AABBTreeNode(
+                min=node.min,
+                max=node.max,
+                children=Children(front=front_index, back=back_index))
+        return index
+
+    flatten(root)
+    header = AABBTreeHeader(node_count=len(nodes), poly_count=len(poly_indices))
+    return AABBTree(header=header, poly_indices=poly_indices, nodes=nodes)
 
 
 def add_stage_from_settings(stage_settings, uv_channel, tx_templates, mesh_struct, cache, mat_pass):

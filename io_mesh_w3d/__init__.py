@@ -10,12 +10,14 @@ from bpy.props import (
     StringProperty,
 )
 from bpy.types import Panel
+from bpy_extras import node_shader_utils
 from bpy_extras.io_utils import ImportHelper, ExportHelper
 from io_mesh_w3d.utils import ReportHelper
 from io_mesh_w3d.export_utils import save_data
 from io_mesh_w3d.custom_properties import *
 from io_mesh_w3d.geometry_export import *
 from io_mesh_w3d.bone_volume_export import *
+from io_mesh_w3d.common.utils.material_settings_bridge import apply_pass_to_material
 
 from io_mesh_w3d.blender_addon_updater import addon_updater_ops
 
@@ -149,6 +151,75 @@ def _object_has_alpha_material(obj):
                 if (m_pass.stage0 and m_pass.stage0.alpha_bitmap) or (m_pass.stage1 and m_pass.stage1.alpha_bitmap):
                     return True
     return False
+
+
+def _iter_w3d_materials(context):
+    """Yield unique materials from the current selection (fallback to the active material)."""
+    seen = set()
+    for obj in getattr(context, 'selected_objects', []):
+        if obj.type != 'MESH':
+            continue
+        for slot in obj.material_slots:
+            mat = slot.material
+            if mat is None:
+                continue
+            if getattr(mat, 'w3d_material_settings', None) is None:
+                continue
+            ident = id(mat)
+            if ident in seen:
+                continue
+            seen.add(ident)
+            yield mat
+
+    obj = getattr(context, 'object', None)
+    mat = getattr(obj, 'active_material', None) if obj else None
+    settings = getattr(mat, 'w3d_material_settings', None) if mat else None
+    if settings is not None:
+        ident = id(mat)
+        if ident not in seen:
+            seen.add(ident)
+            yield mat
+
+
+def _find_display_stage(settings):
+    """Return the first (pass_index, stage_name, pass_settings, stage_settings) with display enabled."""
+    for pass_index, mat_pass in enumerate(settings.passes):
+        for stage_name in ('stage0', 'stage1'):
+            stage = getattr(mat_pass, stage_name, None)
+            if stage is not None and stage.display:
+                return pass_index, stage_name, mat_pass, stage
+    return None
+
+
+def _sync_material_display(material):
+    """Apply the display-enabled stage texture to the Blender material graph."""
+    settings = getattr(material, 'w3d_material_settings', None)
+    if settings is None or not settings.passes:
+        return False, 'NO_SETTINGS'
+
+    selection = _find_display_stage(settings)
+    if selection is None:
+        return False, 'NO_DISPLAY_STAGE'
+
+    pass_index, stage_name, pass_settings, stage_settings = selection
+    if not stage_settings.enabled or stage_settings.texture is None:
+        return False, 'NO_TEXTURE'
+
+    apply_pass_to_material(material, settings, pass_settings)
+
+    material.use_nodes = True
+    principled = node_shader_utils.PrincipledBSDFWrapper(material, is_readonly=False)
+    principled.base_color_texture.image = stage_settings.texture
+
+    for idx, mat_pass in enumerate(settings.passes):
+        for other_stage in ('stage0', 'stage1'):
+            stage = getattr(mat_pass, other_stage, None)
+            if stage is None:
+                continue
+            stage.display = (idx == pass_index and other_stage == stage_name)
+
+    settings.active_pass_index = pass_index
+    return True, None
 
 
 def _collect_objects_with_children(context, include_children):
@@ -299,7 +370,7 @@ class ExportW3D(bpy.types.Operator, ExportHelper, ReportHelper):
     build_new_aabtree: BoolProperty(
         name='Export new AABTree',
         description='Force regeneration of the AABTree chunk',
-        default=False)
+        default=True)
 
     existing_skeleton_path: StringProperty(
         name='Existing skeleton',
@@ -587,6 +658,47 @@ class W3D_OT_material_pass_move(bpy.types.Operator):
             return {'CANCELLED'}
         settings.passes.move(index, new_index)
         settings.active_pass_index = new_index
+        return {'FINISHED'}
+
+
+class W3D_OT_apply_stage_display(bpy.types.Operator):
+    bl_idname = 'w3d.apply_stage_display'
+    bl_label = 'Push Display Texture'
+    bl_description = 'Apply the Display-enabled W3D stage texture to the Blender material graph for the current selection'
+    bl_options = {'UNDO'}
+
+    def execute(self, context):
+        materials = list(_iter_w3d_materials(context))
+        if not materials:
+            self.report({'WARNING'}, 'Select at least one W3D material')
+            return {'CANCELLED'}
+
+        updated = 0
+        missing_texture = []
+        missing_stage = []
+
+        for mat in materials:
+            success, error_code = _sync_material_display(mat)
+            if success:
+                updated += 1
+                continue
+            if error_code == 'NO_TEXTURE':
+                missing_texture.append(mat.name)
+            elif error_code == 'NO_DISPLAY_STAGE':
+                missing_stage.append(mat.name)
+
+        if updated == 0:
+            if missing_texture:
+                self.report({'WARNING'}, 'Display stage requires an enabled bitmap before it can be applied')
+            else:
+                self.report({'WARNING'}, 'No materials had Display enabled stages')
+            return {'CANCELLED'}
+
+        info_msg = f'Updated {updated} material(s)'
+        skipped = len(missing_texture) + len(missing_stage)
+        if skipped:
+            info_msg += f'; skipped {skipped}'
+        self.report({'INFO'}, info_msg)
         return {'FINISHED'}
 
 
@@ -1008,6 +1120,24 @@ class BONE_PROPERTIES_PANEL_PT_w3d(Panel):
             col.prop(context.active_bone, 'visibility')
 
 
+class SCENE_PROPERTIES_PANEL_PT_w3d_workflow(Panel):
+    bl_label = 'W3D Workflow'
+    bl_space_type = 'PROPERTIES'
+    bl_region_type = 'WINDOW'
+    bl_context = 'scene'
+
+    def draw(self, context):
+        layout = self.layout
+        settings = getattr(context.scene, 'w3d_scene_settings', None)
+        if settings is None:
+            layout.label(text='Scene settings are not available.', icon='ERROR')
+            return
+        layout.use_property_split = True
+        layout.prop(settings, 'use_renegade_workflow')
+        info = layout.box()
+        info.label(text='Syncs mesh object types with the selected geometry context.', icon='INFO')
+
+
 class MATERIAL_PROPERTIES_PANEL_PT_w3d(Panel):
     bl_label = 'OpenW3D Material'
     bl_space_type = 'PROPERTIES'
@@ -1128,6 +1258,7 @@ class MATERIAL_PROPERTIES_PANEL_PT_w3d(Panel):
             textures = details.column()
             draw_stage(textures, active_pass.stage0, 'Stage 0 Texture')
             draw_stage(textures, active_pass.stage1, 'Stage 1 Texture')
+            textures.operator('w3d.apply_stage_display', icon='SHADING_TEXTURE', text='Push Display Texture')
 
         legacy = layout.box()
         legacy.label(text='Legacy Properties', icon='INFO')
@@ -1160,8 +1291,12 @@ class TOOLS_PANEL_PT_w3d(bpy.types.Panel):
 
         settings_box = layout.box()
         settings_box.label(text='Settings Utilities')
+        scene_settings = getattr(context.scene, 'w3d_scene_settings', None)
+        if scene_settings:
+            settings_box.prop(scene_settings, 'use_renegade_workflow', icon='MOD_NORMALEDIT')
         settings_box.operator('w3d.copy_settings_to_selected', icon='COPY_ID')
         settings_box.operator('w3d.copy_settings_to_linked', icon='LINKED')
+        settings_box.operator('w3d.apply_stage_display', icon='SHADING_TEXTURE')
 
         preset_box = layout.box()
         preset_box.label(text='Presets')
@@ -1267,6 +1402,7 @@ CLASSES = (
     W3D_OT_material_pass_add,
     W3D_OT_material_pass_remove,
     W3D_OT_material_pass_move,
+    W3D_OT_apply_stage_display,
     W3D_OT_select_bones,
     W3D_OT_select_geometry,
     W3D_OT_select_alpha_meshes,
@@ -1282,9 +1418,11 @@ CLASSES = (
     W3DMaterialPass,
     W3DMaterialSettings,
     W3DObjectSettings,
+    W3DSceneSettings,
     ShaderProperties,
     MESH_PROPERTIES_PANEL_PT_w3d,
     BONE_PROPERTIES_PANEL_PT_w3d,
+    SCENE_PROPERTIES_PANEL_PT_w3d_workflow,
     MATERIAL_PROPERTIES_PANEL_PT_w3d,
     ExportGeometryData,
     ExportBoneVolumeData,
@@ -1320,6 +1458,7 @@ def register():
     Material.shader = PointerProperty(type=ShaderProperties)
     Material.w3d_material_settings = PointerProperty(type=W3DMaterialSettings)
     bpy.types.Object.w3d_object_settings = PointerProperty(type=W3DObjectSettings)
+    bpy.types.Scene.w3d_scene_settings = PointerProperty(type=W3DSceneSettings)
 
     # Refresh dazzle list using persisted preference
     try:
@@ -1350,6 +1489,7 @@ def unregister():
 
     del Material.w3d_material_settings
     del bpy.types.Object.w3d_object_settings
+    del bpy.types.Scene.w3d_scene_settings
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
     bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
 

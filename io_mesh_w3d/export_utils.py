@@ -3,6 +3,8 @@
 
 import os
 
+import bpy
+
 from io_mesh_w3d.common.structs.data_context import *
 
 from io_mesh_w3d.common.utils.mesh_export import *
@@ -11,6 +13,16 @@ from io_mesh_w3d.common.utils.animation_export import *
 from io_mesh_w3d.common.utils.hlod_export import *
 from io_mesh_w3d.common.utils.box_export import *
 from io_mesh_w3d.w3d.utils.dazzle_export import *
+
+
+def _renegade_workflow_enabled(export_context=None):
+    scene = getattr(export_context, 'scene', None)
+    if scene is None:
+        scene = getattr(bpy.context, 'scene', None)
+    if scene is None:
+        return False
+    settings = getattr(scene, 'w3d_scene_settings', None)
+    return bool(settings and settings.use_renegade_workflow)
 
 
 def save_data(context, export_settings):
@@ -31,6 +43,12 @@ def save_data(context, export_settings):
 
 def retrieve_data(context, export_settings):
     export_mode = export_settings['mode']
+    renegade_mode = _renegade_workflow_enabled(context)
+    if renegade_mode and export_mode == 'M':
+        context.info('Renegade workflow enabled: upgrading Mesh export to Hierarchical Model to include hierarchy data.')
+        export_mode = 'HM'
+        export_settings['mode'] = export_mode
+
     terrain_mode = export_mode == 'TERRAIN'
     effective_mode = 'HM' if terrain_mode else export_mode
 
@@ -55,8 +73,9 @@ def retrieve_data(context, export_settings):
         'smooth_vertex_normals': export_settings.get('smooth_vertex_normals', True),
         'optimize_collision': export_settings.get('optimize_collision', True),
         'deduplicate_reference_meshes': export_settings.get('deduplicate_reference_meshes', False),
-        'build_new_aabtree': export_settings.get('build_new_aabtree', False),
+        'build_new_aabtree': export_settings.get('build_new_aabtree', True) or renegade_mode,
         'existing_skeleton_path': export_settings.get('existing_skeleton_path', ''),
+        'renegade_workflow': renegade_mode,
     }
     setattr(context, '_w3d_export_options', export_options)
 

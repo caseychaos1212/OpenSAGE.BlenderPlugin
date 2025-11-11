@@ -12,22 +12,18 @@ def save(context, export_settings, data_context):
     export_mode = export_settings['mode']
     options = getattr(data_context, 'options', {}) or {}
     terrain_flag = options.get('terrain_mode', False)
+    renegade_mode = options.get('renegade_workflow', False)
+    if renegade_mode and export_mode == 'M':
+        context.info('Renegade workflow enabled – forcing hierarchy/HLOD export for mesh mode.')
+        export_mode = 'HM'
     effective_mode = 'HM' if terrain_flag else export_mode
     context.info(f'export mode: {export_mode}')
 
     file = open(filepath, 'wb')
 
     if terrain_flag:
-        for box in data_context.collision_boxes:
-            box.write(file)
-        for dazzle in data_context.dazzles:
-            dazzle.write(file)
         for mesh in data_context.meshes:
             mesh.header.container_name = data_context.container_name
-            mesh.write(file)
-        file.close()
-        context.info('finished')
-        return {'FINISHED'}
 
     if effective_mode == 'M':
         if len(data_context.meshes) > 1:
@@ -38,8 +34,9 @@ def save(context, export_settings, data_context):
         mesh.write(file)
 
     elif effective_mode == 'HM' or effective_mode == 'HAM':
-        if effective_mode == 'HAM' \
-                or not export_settings['use_existing_skeleton']:
+        write_hierarchy = ('H' in effective_mode) and (
+            renegade_mode or effective_mode == 'HAM' or not export_settings['use_existing_skeleton'])
+        if write_hierarchy:
             data_context.hlod.header.hierarchy_name = data_context.container_name
             data_context.hierarchy.header.name = data_context.container_name
             data_context.hierarchy.write(file)
@@ -53,7 +50,8 @@ def save(context, export_settings, data_context):
         for mesh in data_context.meshes:
             mesh.write(file)
 
-        data_context.hlod.write(file)
+        if renegade_mode or 'H' in effective_mode:
+            data_context.hlod.write(file)
         if effective_mode == 'HAM':
             data_context.animation.header.hierarchy_name = data_context.container_name
             data_context.animation.write(file)

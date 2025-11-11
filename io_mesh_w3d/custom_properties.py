@@ -19,6 +19,31 @@ from bpy.props import (
 from bpy.types import Material, PropertyGroup, Bone, Mesh, Object
 
 
+def _sync_object_type_from_settings(settings, context):
+    obj = getattr(settings, 'id_data', None)
+    if obj is None:
+        return
+    try:
+        from io_mesh_w3d.common.utils.object_settings_bridge import sync_object_type_from_settings
+        sync_object_type_from_settings(obj, context=context)
+    except Exception:
+        # During registration or unit tests Blender data may be unavailable.
+        pass
+
+
+def _sync_scene_objects(scene_settings, context):
+    scene = getattr(scene_settings, 'id_data', None)
+    if scene is None and context is not None:
+        scene = getattr(context, 'scene', None)
+    if scene is None:
+        return
+    try:
+        from io_mesh_w3d.common.utils.object_settings_bridge import sync_scene_object_types
+        sync_scene_object_types(scene, context=context)
+    except Exception:
+        pass
+
+
 W3D_GEOMETRY_TYPE_ITEMS = [
     ('NORMAL', 'Normal', 'Standard geometry.'),
     ('CAM_PARAL', 'Cam-Paral', 'Camera parallel billboard.'),
@@ -281,7 +306,8 @@ class W3DObjectSettings(PropertyGroup):
     geometry_type: EnumProperty(
         name='Geometry Type',
         items=W3D_GEOMETRY_TYPE_ITEMS,
-        default='NORMAL')
+        default='NORMAL',
+        update=_sync_object_type_from_settings)
     static_sort_level: IntProperty(name='Static Sort Level', default=0, min=0, max=32)
     screen_size: FloatProperty(name='Screen Size', default=1.0, min=0.0)
     dazzle_name: EnumProperty(
@@ -303,6 +329,14 @@ class W3DObjectSettings(PropertyGroup):
     coll_vis: BoolProperty(name='Vis Collision', default=False)
     coll_camera: BoolProperty(name='Camera Collision', default=False)
     coll_vehicle: BoolProperty(name='Vehicle Collision', default=False)
+
+
+class W3DSceneSettings(PropertyGroup):
+    use_renegade_workflow: BoolProperty(
+        name='Use Renegade workflow',
+        description='Keep mesh object types in sync with the active W3D geometry context',
+        default=False,
+        update=_sync_scene_objects)
 
 
 ##########################################################################
