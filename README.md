@@ -23,9 +23,12 @@ Please see [Setting up for development](https://github.com/OpenSAGE/OpenSAGE.Ble
 * Terrain + collision fixes: terrain mode no longer ejects Normal meshes, collision warnings were removed, exports operate on evaluated mesh copies, and collision flags map directly to `W3D_MESH_FLAG_COLLISION_TYPE_*`.
 * UI & tooling polish: rebuilt the object/material panels to mirror the Max roll-ups, added pass-stack controls with Vertex/Shader/Textures tabs, selection/naming/instance-copy operators, and presets for billboards/dazzles/collision boxes.
 * Branding refresh: rebranded the add-on to OpenW3D (crediting OpenSAGE) and bumped the version to 0.8.0; README/metadata reflect the new name.
-* Added a `Push Display Texture` operator that mirrors Max’s “Assign Material to Selection” behavior by applying the Display-enabled stage bitmap to the Blender material graph.
+* Added a `Push Display Texture` operator that mirrors Max’s “Assign Material to Selection” behavior by applying the Display-enabled stage bitmap to the Blender material graph. (not fully working)
 * Introduced a scene-level “Use Renegade workflow” toggle so geometry context drives mesh/object type synchronization automatically and forces hierarchy/HLOD/AABTree chunks to match the 3ds Max exporter.
 
+## Instructions
+
+Enable the new workflow per scene: open the Scene properties sidebar, expand the W3D Workflow panel, and check Use Renegade workflow. That tells the exporter to treat Blender like the Max Renegade tool—every export (including “Mesh”) will emit hierarchy/HLOD chunks, keep mesh object types in sync with their W3D geometry context, and always build fresh AABTrees, so you no longer have to flip object types or export modes manually.
 
 ## Note
 
