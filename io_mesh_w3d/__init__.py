@@ -80,12 +80,12 @@ W3D_PRESETS = [
 
 W3D_PRESET_ENUM = [(preset['id'], preset['name'], preset['description']) for preset in W3D_PRESETS]
 
-VERSION = (0, 8, 0)
+VERSION = (0, 8, 1)
 
 bl_info = {
     'name': 'Import/Export Westwood W3D Format (.w3d/.w3x)',
     'author': 'OpenW3D Team (built on the work of the OpenSAGE developers)',
-    'version': (0, 8, 0),
+    'version': (0, 8, 1),
     "blender": (2, 90, 0),
     'location': 'File > Import/Export > Westwood W3D (.w3d/.w3x)',
     'description': 'Import or Export the Westwood W3D-Format (.w3d/.w3x)',
@@ -542,6 +542,10 @@ class ImportW3D(bpy.types.Operator, ImportHelper, ReportHelper):
     file_format = ''
 
     filter_glob: StringProperty(default='*.w3d;*.w3x', options={'HIDDEN'})
+    keep_rigid_meshes_static: BoolProperty(
+        name='Keep rigid meshes static',
+        description='Reuse existing rigid meshes instead of reparenting them when importing animation data',
+        default=False)
 
     def execute(self, context):
         print_version(self.info)
@@ -556,6 +560,10 @@ class ImportW3D(bpy.types.Operator, ImportHelper, ReportHelper):
 
         self.info('finished')
         return {'FINISHED'}
+
+    def draw(self, context):
+        layout = self.layout
+        layout.prop(self, 'keep_rigid_meshes_static')
 
 
 class W3D_OT_show_export_log(bpy.types.Operator):

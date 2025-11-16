@@ -113,6 +113,7 @@ def load(context):
     data_context = DataContext()
 
     load_file(context, data_context)
+    keep_static = getattr(context, 'keep_rigid_meshes_static', False)
 
     hierarchy = data_context.hierarchy
     hlod = data_context.hlod

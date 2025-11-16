@@ -5,9 +5,10 @@ import bpy
 import bmesh
 from io_mesh_w3d.common.utils.material_import import *
 from io_mesh_w3d.common.utils.object_settings_bridge import populate_object_settings_from_mesh
+from io_mesh_w3d.common.utils.hierarchy_import import pivot_world_matrix
 
 
-def create_mesh(context, mesh_struct, coll):
+def create_mesh(context, mesh_struct, coll, hierarchy=None, sub_object=None):
     context.info(f'creating mesh \'{mesh_struct.name()}\'')
 
     triangles = []
@@ -40,6 +41,20 @@ def create_mesh(context, mesh_struct, coll):
     populate_object_settings_from_mesh(mesh_ob, mesh_struct)
 
     link_object_to_active_scene(mesh_ob, coll)
+
+    if (not mesh_struct.is_skin()) and hierarchy is not None and sub_object is not None:
+        bone_index = getattr(sub_object, 'bone_index', -1)
+        if 0 <= bone_index < len(hierarchy.pivots):
+            rest_matrix = pivot_world_matrix(hierarchy, bone_index)
+            if rest_matrix is not None:
+                mesh_ob.matrix_world = rest_matrix
+
+    if (not mesh_struct.is_skin()) and hierarchy is not None and sub_object is not None:
+        bone_index = getattr(sub_object, 'bone_index', -1)
+        if 0 <= bone_index < len(hierarchy.pivots):
+            rest_matrix = pivot_world_matrix(hierarchy, bone_index)
+            if rest_matrix is not None:
+                mesh_ob.matrix_world = rest_matrix
 
     if mesh_struct.is_hidden():
         mesh_ob.hide_set(True)
@@ -167,6 +182,12 @@ def rig_mesh(mesh_struct, hierarchy, rig, sub_object=None):
 
     else:
         rig_object(mesh_ob, hierarchy, rig, sub_object)
+        if (not mesh_struct.is_skin()) and hierarchy is not None and sub_object is not None:
+            bone_index = getattr(sub_object, 'bone_index', -1)
+            if 0 <= bone_index < len(hierarchy.pivots):
+                rest_matrix = pivot_world_matrix(hierarchy, bone_index)
+                if rest_matrix is not None:
+                    mesh_ob.matrix_world = rest_matrix
 
 
 def create_vertex_color_layer(mesh, colors, name, index):

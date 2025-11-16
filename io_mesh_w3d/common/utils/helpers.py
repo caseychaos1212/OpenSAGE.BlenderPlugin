@@ -13,7 +13,6 @@ def make_transform_matrix(loc, rot):
     mat_rot = Quaternion(rot).to_matrix().to_4x4()
     return mat_loc @ mat_rot
 
-
 def get_objects(type, object_list=None):  # MESH, ARMATURE
     if object_list is None:
         object_list = bpy.context.scene.objects
@@ -57,7 +56,7 @@ def link_object_to_active_scene(obj, coll):
 def rig_object(obj, hierarchy, rig, sub_object):
     obj.parent = rig
     obj.parent_type = 'ARMATURE'
-    if sub_object.bone_index <= 0:
+    if sub_object.bone_index < 0:
         return
 
     pivot = hierarchy.pivots[sub_object.bone_index]
