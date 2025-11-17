@@ -30,6 +30,8 @@ Please see [Setting up for development](https://github.com/OpenSAGE/OpenSAGE.Ble
 
 Enable the new workflow per scene: open the Scene properties sidebar, expand the W3D Workflow panel, and check Use Renegade workflow. That tells the exporter to treat Blender like the Max Renegade tool—every export (including “Mesh”) will emit hierarchy/HLOD chunks, keep mesh object types in sync with their W3D geometry context, and always build fresh AABTrees, so you no longer have to flip object types or export modes manually.
 
+NOTE: When importing weapon animations import the base mesh first, then import the animation with "Keep Rigid meshes static".
+
 ## Note
 
 The plugin is still in beta and the behaviour may change between releases. Also bugs might still occur, which we'll try to fix as soon as possible. This fork is for W3D engine games and SAGE support may be and likely is broken. Do not expect support for SAGE content from the OpenSAGE community from this fork.

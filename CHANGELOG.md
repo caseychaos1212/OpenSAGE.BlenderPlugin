@@ -1,5 +1,14 @@
 # Version History
 
+
+
+## v0.8.1 (Animation fixes)
+
+* Matched W3D’s hierarchy evaluation: translation channels now drive per-axis offsets relative to the bind pose, ensuring objects import exactly where the W3D data places them.
+* Added automatic frame‑0 baseline keys for animated bones so bind pose stays untouched until the first keyed frame.
+* Force constant interpolation on imported location/rotation/visibility curves to prevent Blender from easing through held keys.
+* Emit identity keys (zero translation/unit quaternion) as soon as a channel runs out of samples, mirroring the engine's "return to rest" behaviour and keeping late frames aligned with W3D Viewer/Engine.
+
 ## v0.8.0 (OpenW3D)
 
 * End-to-end Renegade parity: added the new W3DObjectSettings/material pass data model, selection helpers, naming wizards, LOD/damage helpers, terrain-mode filtering, review-log popup, and dazzle preference override so Blender can author Renegade assets like the 3ds Max tool.
