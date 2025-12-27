@@ -6,6 +6,7 @@ from mathutils import Vector, Quaternion
 from io_mesh_w3d.w3d.adaptive_delta import decode
 from io_mesh_w3d.common.structs.animation import *
 from io_mesh_w3d.w3d.structs.compressed_animation import *
+from io_mesh_w3d.common.utils.animation_compat import iter_action_fcurves
 
 REST_LOC_PROP = '_w3d_rest_location'
 REST_ROT_PROP = '_w3d_rest_rotation'
@@ -83,7 +84,7 @@ def _set_constant_keyframe(owner, prop, index=None):
     if id_data is None or id_data.animation_data is None or id_data.animation_data.action is None:
         return
     data_path = owner.path_from_id(prop)
-    for fcurve in id_data.animation_data.action.fcurves:
+    for fcurve in iter_action_fcurves(id_data.animation_data.action):
         if fcurve.data_path == data_path and (index is None or fcurve.array_index == index):
             if fcurve.keyframe_points:
                 fcurve.keyframe_points[-1].interpolation = 'CONSTANT'

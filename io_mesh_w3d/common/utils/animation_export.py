@@ -4,6 +4,7 @@
 import bpy
 from mathutils import Quaternion
 from io_mesh_w3d.common.utils.helpers import *
+from io_mesh_w3d.common.utils.animation_compat import iter_action_fcurves
 from io_mesh_w3d.common.structs.animation import *
 from io_mesh_w3d.w3d.structs.compressed_animation import *
 
@@ -27,7 +28,7 @@ def retrieve_channels(obj, hierarchy, timecoded, name=None, default_frame_range=
     channel = None
     channels = []
 
-    for fcu in obj.animation_data.action.fcurves:
+    for fcu in iter_action_fcurves(obj.animation_data.action):
         if name is None:
             values = fcu.data_path.split('"')
             if len(values) == 1:
