@@ -98,6 +98,24 @@ class TestAnimationUtils(TestCase):
         self.assertEqual(1, len(ani.channels))
         self.assertTrue(isinstance(ani.channels[0], AnimationBitChannel))
 
+    def test_pose_bone_rotation_channels_keep_first_key_value(self):
+        hierarchy = get_hierarchy()
+        animation = get_animation_empty()
+        channel = get_animation_channel(type=CHANNEL_Q, pivot=1)
+        channel.first_frame = 2
+        channel.last_frame = 3
+        channel.data = [
+            get_quat(0.9238795, 0.0, 0.3826834, 0.0),
+            get_quat(0.7071068, 0.0, 0.7071068, 0.0)]
+        animation.channels = [channel]
+
+        rig = get_or_create_skeleton(hierarchy, get_collection())
+        create_animation(self, rig, animation, hierarchy)
+
+        bpy.context.scene.frame_set(channel.first_frame)
+        actual = rig.pose.bones[hierarchy.pivots[channel.pivot].name].rotation_quaternion
+        self.assertAlmostEqual(1.0, abs(actual.dot(channel.data[0])), 4)
+
     def test_quaternions_are_normalized_on_export_uncompressed(self):
         bpy.context.scene.frame_end = 0
         bpy.context.scene.frame_end = 10
