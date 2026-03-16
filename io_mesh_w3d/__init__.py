@@ -19,10 +19,6 @@ from io_mesh_w3d.geometry_export import *
 from io_mesh_w3d.bone_volume_export import *
 from io_mesh_w3d.common.utils.material_settings_bridge import apply_pass_to_material
 
-from io_mesh_w3d.blender_addon_updater import addon_updater_ops
-
-_ADDON_UPDATER_REGISTERED = False
-
 W3D_PRESETS = [
     {
         'id': 'TERRAIN_BILLBOARD',
@@ -90,8 +86,8 @@ bl_info = {
     'location': 'File > Import/Export > Westwood W3D (.w3d/.w3x)',
     'description': 'Import or Export the Westwood W3D-Format (.w3d/.w3x)',
     'warning': 'Still in Progress',
-    'doc_url': 'https://github.com/OpenSAGE/OpenSAGE.BlenderPlugin',
-    'tracker_url': 'https://github.com/OpenSAGE/OpenSAGE.BlenderPlugin/issues',
+    'doc_url': 'https://github.com/caseychaos1212/OpenSAGE.BlenderPlugin',
+    'tracker_url': 'https://github.com/caseychaos1212/OpenSAGE.BlenderPlugin/issues',
     'support': 'OFFICIAL',
     'category': 'Import-Export'}
 
@@ -1316,92 +1312,6 @@ class TOOLS_PANEL_PT_w3d(bpy.types.Panel):
         export_box.operator('scene.export_bone_volume_data', icon='BONE_DATA', text='Export Bone Volume Data')
 
 
-class OBJECT_PT_DemoUpdaterPanel(bpy.types.Panel):
-    bl_label = 'Updater Demo Panel'
-    bl_idname = 'OBJECT_PT_hello'
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_context = 'objectmode'
-    bl_category = 'Tools'
-
-    def draw(self, context):
-        layout = self.layout
-
-        addon_updater_ops.check_for_update_background()
-
-        layout.label(text='Demo Updater Addon')
-        layout.label(text='')
-
-        col = layout.column()
-        col.scale_y = 0.7
-        col.label(text='If an update is ready,')
-        col.label(text='popup triggered by opening')
-        col.label(text='this panel, plus a box ui')
-
-        if addon_updater_ops.updater.update_ready:
-            layout.label(text='An update for the W3D/W3X plugin is available', icon='INFO')
-        layout.label(text='')
-
-        addon_updater_ops.update_notice_box_ui(self, context)
-
-
-@addon_updater_ops.make_annotations
-class DemoPreferences(bpy.types.AddonPreferences):
-    bl_idname = __package__
-
-    auto_check_update = bpy.props.BoolProperty(
-        name='Auto-check for Update',
-        description='If enabled, auto-check for updates using an interval',
-        default=False,
-    )
-    updater_intrval_months = bpy.props.IntProperty(
-        name='Months',
-        description='Number of months between checking for updates',
-        default=0,
-        min=0
-    )
-    updater_intrval_days = bpy.props.IntProperty(
-        name='Days',
-        description='Number of days between checking for updates',
-        default=7,
-        min=0,
-        max=31
-    )
-    updater_intrval_hours = bpy.props.IntProperty(
-        name='Hours',
-        description='Number of hours between checking for updates',
-        default=0,
-        min=0,
-        max=23
-    )
-    updater_intrval_minutes = bpy.props.IntProperty(
-        name='Minutes',
-        description='Number of minutes between checking for updates',
-        default=0,
-        min=0,
-        max=59
-    )
-
-    dazzle_ini_path: bpy.props.StringProperty(
-        name='Dazzle INI Path',
-        description='Override the dazzle.ini used for Dazzle Type menus',
-        subtype='FILE_PATH',
-        default='',
-        update=lambda self, context: refresh_dazzle_items(self.dazzle_ini_path))
-
-    def draw(self, context):
-        layout = self.layout
-
-        mainrow = layout.row()
-        col = mainrow.column()
-
-        addon_updater_ops.update_settings_ui(self, context)
-        layout.separator()
-        box = layout.box()
-        box.label(text='W3D Settings')
-        box.prop(self, 'dazzle_ini_path')
-
-
 CLASSES = (
     ExportW3D,
     ImportW3D,
@@ -1434,32 +1344,11 @@ CLASSES = (
     MATERIAL_PROPERTIES_PANEL_PT_w3d,
     ExportGeometryData,
     ExportBoneVolumeData,
-    TOOLS_PANEL_PT_w3d,
-    DemoPreferences,
-    OBJECT_PT_DemoUpdaterPanel
+    TOOLS_PANEL_PT_w3d
 )
 
 
 def register():
-    global _ADDON_UPDATER_REGISTERED
-    addon_updater_ops._package = 'io_mesh_w3d'
-    addon_updater_ops.updater.addon = 'io_mesh_w3d'
-    addon_updater_ops.updater.user = "OpenSAGE"
-    addon_updater_ops.updater.repo = "OpenSAGE.BlenderPlugin"
-    addon_updater_ops.updater.website = "https://github.com/OpenSAGE/OpenSAGE.BlenderPlugin"
-    addon_updater_ops.updater.subfolder_path = "io_mesh_w3d"
-    addon_updater_ops.updater.include_branch_list = ['master']
-    addon_updater_ops.updater.verbose = False
-
-    try:
-        addon_updater_ops.register(bl_info)
-        _ADDON_UPDATER_REGISTERED = True
-    except RuntimeError as exc:
-        if 'AddonUpdaterInstallPopup' in str(exc):
-            print('Addon updater already registered, skipping duplicate registration')
-        else:
-            raise
-
     for class_ in CLASSES:
         bpy.utils.register_class(class_)
 
@@ -1481,17 +1370,6 @@ def register():
 
 
 def unregister():
-    global _ADDON_UPDATER_REGISTERED
-    if _ADDON_UPDATER_REGISTERED:
-        try:
-            addon_updater_ops.unregister()
-        except RuntimeError as exc:
-            if 'AddonUpdaterInstallPopup' in str(exc):
-                print('Addon updater was not registered, skipping unregister')
-            else:
-                raise
-        _ADDON_UPDATER_REGISTERED = False
-
     for class_ in reversed(CLASSES):
         bpy.utils.unregister_class(class_)
 
