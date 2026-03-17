@@ -56,7 +56,7 @@ def link_object_to_active_scene(obj, coll):
 def rig_object(obj, hierarchy, rig, sub_object):
     obj.parent = rig
     obj.parent_type = 'ARMATURE'
-    if sub_object.bone_index <= 0:
+    if sub_object.bone_index < 0:
         return
 
     pivot = hierarchy.pivots[sub_object.bone_index]
