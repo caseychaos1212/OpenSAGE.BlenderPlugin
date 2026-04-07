@@ -21,6 +21,7 @@ class TestCustomProperties(TestCase):
     def test_object_properties(self):
         mesh = bpy.data.meshes.new('mesh')
         obj = bpy.data.objects.new('object', mesh)
+        settings = obj.w3d_object_settings
 
         self.assertEqual('', obj.data.userText)
         obj.data.userText = 'lorem ipsum'
@@ -35,6 +36,19 @@ class TestCustomProperties(TestCase):
 
         with self.assertRaises(TypeError):
             obj.data.object_type = 'INVALID'
+
+        self.assertEqual('LOD', settings.hlod_role)
+        settings.hlod_role = 'AGGREGATE'
+        self.assertEqual('AGGREGATE', settings.hlod_role)
+        settings.hlod_role = 'PROXY'
+        self.assertEqual('PROXY', settings.hlod_role)
+
+        with self.assertRaises(TypeError):
+            settings.hlod_role = 'INVALID'
+
+        self.assertEqual('', settings.hlod_identifier)
+        settings.hlod_identifier = 'test_proxy$1.5'
+        self.assertEqual('test_proxy$1.5', settings.hlod_identifier)
 
         dazzle_types = ['DEFAULT', 'SUN', 'REN_L5_STREETLIGHT', 'REN_BRAKELIGHT',
                         'REN_HEADLIGHT', 'REN_L5_REDLIGHT', 'REN_NUKE', 'REN_BLINKLIGHT_RED',

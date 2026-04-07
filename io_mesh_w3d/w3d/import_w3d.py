@@ -18,11 +18,20 @@ from io_mesh_w3d.common.utils.object_settings_bridge import populate_object_sett
 from io_mesh_w3d.common.utils.material_settings_bridge import populate_settings_from_material
 
 
+def record_loaded_file(context, path):
+    loaded_files = getattr(context, '_w3d_loaded_files', None)
+    if loaded_files is None:
+        return
+    if path not in loaded_files:
+        loaded_files.append(path)
+
+
 def load_file(context, data_context, path=None):
     if path is None:
         path = context.filepath
 
     path = insensitive_path(path)
+    record_loaded_file(context, path)
     context.info(f'Loading file: {path}')
 
     if not os.path.exists(path):
@@ -113,7 +122,6 @@ def load(context):
     data_context = DataContext()
 
     load_file(context, data_context)
-    keep_static = getattr(context, 'keep_rigid_meshes_static', False)
 
     hierarchy = data_context.hierarchy
     hlod = data_context.hlod
@@ -142,14 +150,17 @@ def load(context):
                     f'hierarchy file not found: {sklpath}. Make sure it is right next to the file you are importing.')
                 return
 
-    create_data(context,
-                data_context.meshes,
-                data_context.hlod,
-                data_context.hierarchy,
-                data_context.collision_boxes,
-                data_context.animation,
-                data_context.compressed_animation,
-                data_context.dazzles)
+    import_state = create_data(context,
+                               data_context.meshes,
+                               data_context.hlod,
+                               data_context.hierarchy,
+                               data_context.collision_boxes,
+                               data_context.animation,
+                               data_context.compressed_animation,
+                               data_context.dazzles) or {}
+    import_state['source_path'] = context.filepath
+    import_state['loaded_files'] = list(getattr(context, '_w3d_loaded_files', []) or [])
+    context._w3d_import_state = import_state
     backfill_w3d_properties(data_context)
     return {'FINISHED'}
 
@@ -293,6 +304,10 @@ def snapshot_pass(pass_prop):
         'opacity': pass_prop.opacity,
         'translucency': pass_prop.translucency,
         'shininess': pass_prop.shininess,
+        'stage0_mapping': pass_prop.stage0_mapping,
+        'stage1_mapping': pass_prop.stage1_mapping,
+        'stage0_args': pass_prop.stage0_args,
+        'stage1_args': pass_prop.stage1_args,
         'uv0': pass_prop.uv_channel_stage0,
         'uv1': pass_prop.uv_channel_stage1,
     }
@@ -309,5 +324,9 @@ def apply_pass_template(target, template):
     target.opacity = template['opacity']
     target.translucency = template['translucency']
     target.shininess = template['shininess']
+    target.stage0_mapping = template['stage0_mapping']
+    target.stage1_mapping = template['stage1_mapping']
+    target.stage0_args = template['stage0_args']
+    target.stage1_args = template['stage1_args']
     target.uv_channel_stage0 = template['uv0']
     target.uv_channel_stage1 = template['uv1']

@@ -14,10 +14,19 @@ from io_mesh_w3d.common.utils.hierarchy_export import *
 from io_mesh_w3d.common.utils.hlod_export import *
 
 
+def record_loaded_file(context, path):
+    loaded_files = getattr(context, '_w3d_loaded_files', None)
+    if loaded_files is None:
+        return
+    if path not in loaded_files:
+        loaded_files.append(path)
+
+
 def load_file(context, data_context, path=None):
     if path is None:
         path = context.filepath
 
+    record_loaded_file(context, path)
     context.info(f'Loading file: {path}')
 
     if not os.path.exists(path):
@@ -161,6 +170,9 @@ def load(context):
     hlod = data_context.hlod
     animation = data_context.animation
 
-    create_data(context, meshes, hlod, hierarchy, boxes, animation)
+    import_state = create_data(context, meshes, hlod, hierarchy, boxes, animation) or {}
+    import_state['source_path'] = context.filepath
+    import_state['loaded_files'] = list(getattr(context, '_w3d_loaded_files', []) or [])
+    context._w3d_import_state = import_state
     context.info("Finished!")
     return {'FINISHED'}

@@ -33,6 +33,22 @@ class TestMeshExportUtils(TestCase):
         mesh = meshes[0]
         self.assertEqual(42, len(mesh.verts))
 
+    def test_modifiers_are_not_applied_when_disabled_on_export(self):
+        self.loadBlend(up(up(up(self.relpath()))) + '/testfiles/cube_with_modifiers.blend')
+
+        self.assertTrue('Cube' in bpy.data.objects)
+
+        self._w3d_export_options = {'apply_modifiers': False}
+        try:
+            meshes, _ = retrieve_meshes(self, None, None, 'container_name')
+        finally:
+            del self._w3d_export_options
+
+        self.assertEqual(1, len(meshes))
+
+        mesh = meshes[0]
+        self.assertEqual(12, len(mesh.verts))
+
     def test_multiuser_mesh_with_modifiers_export(self):
         self.loadBlend(up(up(up(self.relpath()))) + '/testfiles/multiuser_mesh_with_modifiers.blend')
 
@@ -679,6 +695,26 @@ class TestMeshExportUtils(TestCase):
 
         for triangle in meshes[0].triangles:
             self.assertEqual(13, triangle.surface_type)
+
+    def test_mesh_export_uses_w3d_material_surface_type(self):
+        m = get_mesh('mesh')
+        create_mesh(self, m, get_collection())
+
+        mesh_object = bpy.data.objects['mesh']
+        material = mesh_object.data.materials[0]
+        material.surface_type = '13'
+        material.w3d_material_settings.surface_type = '8'
+
+        if bpy.app.version < (4, 0, 0):
+            mesh_object.face_maps.clear()
+        else:
+            mesh_object.data.face_maps.clear()
+
+        meshes, _ = retrieve_meshes(self, None, None, 'container_name')
+
+        self.assertEqual(1, len(meshes))
+        for triangle in meshes[0].triangles:
+            self.assertEqual(8, triangle.surface_type)
 
     def test_mesh_export_invalid_vertex_color_layer_name(self):
         mesh = get_mesh('mesh')

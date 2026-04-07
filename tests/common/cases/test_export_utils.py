@@ -41,6 +41,25 @@ class TestExportUtils(TestCase):
             self.assertIsNone(retrieve_data(self, {'mode': 'M'}))
             report_func.assert_called_with('Scene does not contain any meshes, aborting export!')
 
+    @patch('io_mesh_w3d.export_utils.retrieve_hierarchy', return_value=(get_hierarchy(), None))
+    @patch('io_mesh_w3d.export_utils.create_hlod', return_value=HLod(
+        header=get_hlod_header('filename', 'TestHierarchy', lod_count=1),
+        lod_arrays=[HLodLodArray(header=get_hlod_array_header(count=0), sub_objects=[])],
+        aggregate_array=get_hlod_aggregate_array_minimal()))
+    @patch('io_mesh_w3d.export_utils.retrieve_boxes', return_value=[])
+    @patch('io_mesh_w3d.export_utils.retrieve_dazzles', return_value=[])
+    @patch('io_mesh_w3d.export_utils.retrieve_meshes', return_value=([], []))
+    def test_retrieve_data_allows_attachment_only_hlod_export(
+            self, retrieve_meshes, retrieve_dazzles, retrieve_boxes, retrieve_hlod, retrieve_hierarchy):
+
+        self.filepath = r'C:dir' + os.path.sep + 'dir.dir' + os.path.sep + 'filename'
+
+        data_context = retrieve_data(self, {'mode': 'HM'})
+
+        self.assertIsNotNone(data_context)
+        self.assertEqual([], data_context.meshes)
+        self.assertIsNotNone(data_context.hlod.aggregate_array)
+
     @patch('io_mesh_w3d.export_utils.retrieve_hierarchy', return_value=(None, None))
     @patch('io_mesh_w3d.export_utils.create_hlod', return_value=None)
     @patch('io_mesh_w3d.export_utils.retrieve_boxes', return_value=[])
@@ -129,3 +148,26 @@ class TestExportUtils(TestCase):
             report_func.assert_called_with('aborting export!')
 
         validate.assert_called()
+
+    @patch('io_mesh_w3d.export_utils.retrieve_hierarchy', return_value=(None, None))
+    @patch('io_mesh_w3d.export_utils.create_hlod', return_value=None)
+    @patch('io_mesh_w3d.export_utils.retrieve_boxes', return_value=[])
+    @patch('io_mesh_w3d.export_utils.retrieve_dazzles', return_value=[])
+    @patch('io_mesh_w3d.export_utils.retrieve_meshes')
+    def test_retrieve_data_passes_apply_modifiers_option_to_export_context(
+            self, retrieve_meshes, retrieve_dazzles, retrieve_boxes, retrieve_hlod, retrieve_hierarchy):
+        self.filepath = r'C:dir' + os.path.sep + 'dir.dir' + os.path.sep + 'filename'
+
+        captured_options = {}
+
+        def fake_retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materials=False):
+            captured_options.update(getattr(context, '_w3d_export_options', {}))
+            return ([get_mesh()], [])
+
+        retrieve_meshes.side_effect = fake_retrieve_meshes
+
+        data_context = retrieve_data(self, {'mode': 'M', 'apply_modifiers': False})
+
+        self.assertIsNotNone(data_context)
+        self.assertIn('apply_modifiers', captured_options)
+        self.assertFalse(captured_options['apply_modifiers'])

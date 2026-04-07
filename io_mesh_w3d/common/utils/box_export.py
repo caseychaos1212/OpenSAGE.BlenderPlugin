@@ -3,6 +3,7 @@
 
 from io_mesh_w3d.common.utils.helpers import *
 from io_mesh_w3d.common.structs.collision_box import *
+from io_mesh_w3d.common.utils.object_settings_bridge import is_hlod_attachment, should_export_geometry
 
 
 def retrieve_boxes(container_name):
@@ -10,6 +11,8 @@ def retrieve_boxes(container_name):
 
     for mesh_object in get_objects('MESH'):
         if mesh_object.data.object_type != 'BOX':
+            continue
+        if is_hlod_attachment(mesh_object) or not should_export_geometry(mesh_object):
             continue
         name = container_name + '.' + mesh_object.name
         box = CollisionBox(

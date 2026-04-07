@@ -42,34 +42,86 @@ def get_used_textures(material, principled, used_textures):
     return used_textures
 
 
-def retrieve_vertex_material(material, principled):
+def _resolve_vertex_material_state(material, principled, settings=None, pass_settings=None):
+    if settings is None:
+        settings = getattr(material, 'w3d_material_settings', None)
+
+    active_pass = pass_settings
+    if active_pass is None and settings is not None and getattr(settings, 'passes', None):
+        if settings.passes:
+            index = min(settings.active_pass_index, len(settings.passes) - 1)
+            active_pass = settings.passes[index]
+
+    if active_pass is None:
+        return {
+            'attributes': set(material.attributes),
+            'ambient': tuple(material.ambient),
+            'diffuse': tuple(material.diffuse_color),
+            'specular': tuple(material.specular),
+            'emissive': tuple(principled.emission_color),
+            'shininess': principled.specular,
+            'opacity': principled.alpha,
+            'translucency': material.translucency,
+            'stage0_mapping': material.stage0_mapping,
+            'stage1_mapping': material.stage1_mapping,
+            'vm_args_0': material.vm_args_0,
+            'vm_args_1': material.vm_args_1,
+        }
+
+    attributes = set(settings.attributes) if settings is not None and settings.attributes else {'DEFAULT'}
+    if active_pass.specular_to_diffuse:
+        attributes.add('COPY_SPECULAR_TO_DIFFUSE')
+    else:
+        attributes.discard('COPY_SPECULAR_TO_DIFFUSE')
+        if not attributes:
+            attributes = {'DEFAULT'}
+
+    return {
+        'attributes': attributes,
+        'ambient': tuple(active_pass.ambient),
+        'diffuse': tuple(active_pass.diffuse),
+        'specular': tuple(active_pass.specular),
+        'emissive': tuple(active_pass.emissive),
+        'shininess': active_pass.shininess,
+        'opacity': active_pass.opacity,
+        'translucency': active_pass.translucency,
+        'stage0_mapping': active_pass.stage0_mapping,
+        'stage1_mapping': active_pass.stage1_mapping,
+        'vm_args_0': active_pass.stage0_args,
+        'vm_args_1': active_pass.stage1_args,
+    }
+
+
+def retrieve_vertex_material(material, principled, settings=None, pass_settings=None):
+    state = _resolve_vertex_material_state(material, principled, settings, pass_settings)
+
     info = VertexMaterialInfo(
         attributes=0,
-        shininess=principled.specular,
-        specular=RGBA(vec=material.specular, a=0),
-        diffuse=RGBA(vec=material.diffuse_color, a=0),
-        emissive=RGBA(vec=principled.emission_color, a=0),
-        ambient=RGBA(vec=material.ambient),
-        translucency=material.translucency,
-        opacity=principled.alpha)
+        shininess=state['shininess'],
+        specular=RGBA(vec=state['specular'], a=0),
+        diffuse=RGBA(vec=state['diffuse'], a=0),
+        emissive=RGBA(vec=state['emissive'], a=0),
+        ambient=RGBA(vec=state['ambient']),
+        translucency=state['translucency'],
+        opacity=state['opacity'])
 
-    if 'USE_DEPTH_CUE' in material.attributes:
+    if 'USE_DEPTH_CUE' in state['attributes']:
         info.attributes |= USE_DEPTH_CUE
-    if 'ARGB_EMISSIVE_ONLY' in material.attributes:
+    if 'ARGB_EMISSIVE_ONLY' in state['attributes']:
         info.attributes |= ARGB_EMISSIVE_ONLY
-    if 'COPY_SPECULAR_TO_DIFFUSE' in material.attributes:
+    if 'COPY_SPECULAR_TO_DIFFUSE' in state['attributes']:
         info.attributes |= COPY_SPECULAR_TO_DIFFUSE
-    if 'DEPTH_CUE_TO_ALPHA' in material.attributes:
+    if 'DEPTH_CUE_TO_ALPHA' in state['attributes']:
         info.attributes |= DEPTH_CUE_TO_ALPHA
 
-    info.attributes |= int(material.stage0_mapping, 16) & STAGE0_MAPPING_MASK
-    info.attributes |= int(material.stage1_mapping, 16) & STAGE1_MAPPING_MASK
+    info.attributes |= int(state['stage0_mapping'], 16) & STAGE0_MAPPING_MASK
+    info.attributes |= int(state['stage1_mapping'], 16) & STAGE1_MAPPING_MASK
 
     vert_material = VertexMaterial(
         vm_name=material.name.split('.', 1)[-1],
         vm_info=info,
-        vm_args_0=material.vm_args_0.replace(' ', '').replace(',', '\r\n'),
-        vm_args_1=material.vm_args_1.replace(' ', '').replace(',', '\r\n'))
+        vm_args_0=state['vm_args_0'].replace(' ', '').replace(',', '\r\n'),
+        vm_args_1=state['vm_args_1'].replace(' ', '').replace(',', '\r\n'))
 
     return vert_material
 

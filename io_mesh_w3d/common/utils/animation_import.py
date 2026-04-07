@@ -6,7 +6,7 @@ from mathutils import Vector, Quaternion
 from io_mesh_w3d.w3d.adaptive_delta import decode
 from io_mesh_w3d.common.structs.animation import *
 from io_mesh_w3d.w3d.structs.compressed_animation import *
-from io_mesh_w3d.common.utils.animation_compat import iter_action_fcurves
+from io_mesh_w3d.common.utils.animation_compat import iter_id_action_fcurves
 
 REST_LOC_PROP = '_w3d_rest_location'
 REST_ROT_PROP = '_w3d_rest_rotation'
@@ -73,6 +73,7 @@ def setup_animation(animation):
 
 
 creation_options = {'INSERTKEY_NEEDED'}
+BASELINE_ROTATIONS = {}
 TRANSLATION_BASELINES = set()
 
 
@@ -83,7 +84,7 @@ def _set_constant_keyframe(owner, prop, index=None):
     if id_data is None or id_data.animation_data is None or id_data.animation_data.action is None:
         return
     data_path = owner.path_from_id(prop)
-    for fcurve in iter_action_fcurves(id_data.animation_data.action):
+    for fcurve in iter_id_action_fcurves(id_data):
         if fcurve.data_path == data_path and (index is None or fcurve.array_index == index):
             if fcurve.keyframe_points:
                 fcurve.keyframe_points[-1].interpolation = 'CONSTANT'
@@ -158,7 +159,37 @@ def _log_channel_debug(context, bone, channel, rest_location, rest_rotation, val
         reporter(f'[AnimDebug] {name} rotation: rest={rest} first_key={first}')
 
 
+def _collect_rigid_bone_names(rig):
+    if rig is None:
+        return set()
+
+    rigid_bones = set()
+    for obj in bpy.data.objects:
+        if obj.parent != rig or obj.parent_type != 'BONE' or not obj.parent_bone:
+            continue
+        rigid_bones.add(obj.parent_bone)
+    return rigid_bones
+
+
+def _apply_baseline(bone, channel, value, rotation_baselines):
+    if isinstance(bone, bpy.types.Object) or rotation_baselines is None:
+        return value
+
+    if is_visibility(channel) or is_translation(channel):
+        return value
+
+    rigid_bones = rotation_baselines.get('rigid_bones', set())
+    if bone.name not in rigid_bones:
+        return value
+
+    quat_val = Quaternion(value)
+    baselines = rotation_baselines.setdefault('values', {})
+    baseline = baselines.setdefault(channel.pivot, quat_val.copy())
+    return baseline.inverted() @ quat_val
+
+
 def set_keyframe(context, bone, channel, frame, value, rest_location=None, rest_rotation=None, rotation_baselines=None):
+    value = _apply_baseline(bone, channel, value, rotation_baselines)
     if is_visibility(channel):
         set_visibility(context, bone, frame, value)
     elif is_translation(channel):
@@ -281,14 +312,19 @@ def create_animation(context, rig, animation, hierarchy):
         return
 
     setup_animation(animation)
+    rig_id = id(rig) if rig is not None else None
+    rotation_baselines = {
+        'values': BASELINE_ROTATIONS.setdefault(rig_id, {}),
+        'rigid_bones': _collect_rigid_bone_names(rig),
+    }
     num_frames = animation.header.num_frames
 
     if isinstance(animation, CompressedAnimation):
-        process_channels(context, hierarchy, animation.time_coded_channels, rig, apply_timecoded, None, num_frames)
-        process_channels(context, hierarchy, animation.adaptive_delta_channels, rig, apply_adaptive_delta, None, num_frames)
-        process_motion_channels(context, hierarchy, animation.motion_channels, rig, None, num_frames)
+        process_channels(context, hierarchy, animation.time_coded_channels, rig, apply_timecoded, rotation_baselines, num_frames)
+        process_channels(context, hierarchy, animation.adaptive_delta_channels, rig, apply_adaptive_delta, rotation_baselines, num_frames)
+        process_motion_channels(context, hierarchy, animation.motion_channels, rig, rotation_baselines, num_frames)
     else:
-        process_channels(context, hierarchy, animation.channels, rig, apply_uncompressed, None, num_frames)
+        process_channels(context, hierarchy, animation.channels, rig, apply_uncompressed, rotation_baselines, num_frames)
 
     if rig is not None and rig.animation_data is not None and rig.animation_data.action is not None:
         rig.animation_data.action.name = animation.header.name
@@ -296,4 +332,6 @@ def create_animation(context, rig, animation, hierarchy):
         rig.data.animation_data.action.name = animation.header.name
 
     bpy.context.scene.frame_set(0)
+    if rig_id in BASELINE_ROTATIONS:
+        del BASELINE_ROTATIONS[rig_id]
     TRANSLATION_BASELINES.clear()

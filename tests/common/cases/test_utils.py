@@ -9,6 +9,12 @@ from unittest.mock import patch
 
 from io_mesh_w3d.export_utils import *
 from io_mesh_w3d.import_utils import *
+from io_mesh_w3d.common.utils.material_settings_bridge import (
+    apply_pass_to_material,
+    populate_settings_from_material,
+    restore_material_state,
+    snapshot_material_state,
+)
 from tests.common.helpers.animation import *
 from tests.common.helpers.collision_box import *
 from tests.common.helpers.hierarchy import *
@@ -56,6 +62,58 @@ class TestUtils(TestCase):
             principled = node_shader_utils.PrincipledBSDFWrapper(material, is_readonly=True)
             actual = retrieve_vertex_material(material, principled)
             compare_vertex_materials(self, source, actual)
+
+    def test_vertex_material_populates_pass_vertex_mapper_settings(self):
+        mesh = get_mesh()
+        source = mesh.vert_materials[0]
+
+        (material, _) = create_material_from_vertex_material(mesh.name(), source)
+        settings = material.w3d_material_settings
+        self.assertEqual(1, len(settings.passes))
+
+        active_pass = settings.passes[0]
+        self.assertEqual('0x00040000', active_pass.stage0_mapping)
+        self.assertEqual('0x00000400', active_pass.stage1_mapping)
+        self.assertEqual(source.vm_args_0.replace('\r\n', ', '), active_pass.stage0_args)
+        self.assertEqual(source.vm_args_1.replace('\r\n', ', '), active_pass.stage1_args)
+        self.assertTrue(active_pass.specular_to_diffuse)
+
+    def test_vertex_material_roundtrip_from_pass_settings(self):
+        mesh = get_mesh()
+        source = mesh.vert_materials[0]
+
+        (material, _) = create_material_from_vertex_material(mesh.name(), source)
+        settings = material.w3d_material_settings
+        active_pass = settings.passes[0]
+        state = snapshot_material_state(material)
+
+        try:
+            apply_pass_to_material(material, settings, active_pass)
+            principled = node_shader_utils.PrincipledBSDFWrapper(material, is_readonly=True)
+            actual = retrieve_vertex_material(material, principled)
+        finally:
+            restore_material_state(material, state)
+
+        compare_vertex_materials(self, source, actual)
+
+    def test_vertex_material_prefers_pass_values_over_principled_values(self):
+        mesh = get_mesh()
+        source = mesh.vert_materials[0]
+
+        (material, _) = create_material_from_vertex_material(mesh.name(), source)
+        settings = material.w3d_material_settings
+        active_pass = settings.passes[0]
+        active_pass.emissive = (0.2, 0.4, 0.6)
+        active_pass.opacity = 0.25
+        active_pass.shininess = 7.5
+
+        principled = node_shader_utils.PrincipledBSDFWrapper(material, is_readonly=True)
+        actual = retrieve_vertex_material(material, principled)
+
+        source.vm_info.emissive = RGBA(vec=(0.2, 0.4, 0.6), a=0)
+        source.vm_info.opacity = 0.25
+        source.vm_info.shininess = 7.5
+        compare_vertex_materials(self, source, actual)
 
     def test_shader_material_roundtrip(self):
         mesh = get_mesh(shader_mats=True)
@@ -182,6 +240,79 @@ class TestUtils(TestCase):
         actual.texturing = 1  # this is set on export if a texture is applied
         compare_shaders(self, expected, actual)
 
+    def test_shader_settings_populate_pass_shader_enums(self):
+        mesh = get_mesh()
+
+        (material, _) = create_material_from_vertex_material(mesh.name(), mesh.vert_materials[0])
+        expected = mesh.shaders[0]
+        material.blend_mode = 6
+        set_shader_properties(material, expected)
+        material.shader.alpha_test = '1'
+        populate_settings_from_material(material)
+
+        active_pass = material.w3d_material_settings.passes[0]
+        self.assertEqual('6', active_pass.shader.blend_mode)
+        self.assertEqual(str(expected.src_blend), active_pass.shader.custom_src)
+        self.assertEqual(str(expected.dest_blend), active_pass.shader.custom_dest)
+        self.assertEqual(str(expected.depth_compare), active_pass.shader.depth_compare)
+        self.assertEqual(str(expected.pri_gradient), active_pass.shader.pri_gradient)
+        self.assertEqual(str(expected.sec_gradient), active_pass.shader.sec_gradient)
+        self.assertEqual(str(expected.detail_color_func), active_pass.shader.detail_color)
+        self.assertEqual(str(expected.detail_alpha_func), active_pass.shader.detail_alpha)
+        self.assertTrue(active_pass.shader.alpha_test)
+
+    def test_shader_blend_mode_preset_updates_low_level_controls(self):
+        mesh = get_mesh()
+
+        (material, _) = create_material_from_vertex_material(mesh.name(), mesh.vert_materials[0])
+        active_pass = material.w3d_material_settings.passes[0]
+
+        active_pass.shader.blend_mode = '7'
+
+        self.assertEqual('2', active_pass.shader.custom_src)
+        self.assertEqual('5', active_pass.shader.custom_dest)
+        self.assertTrue(active_pass.shader.write_z)
+        self.assertTrue(active_pass.shader.alpha_test)
+
+    def test_shader_low_level_controls_update_blend_mode(self):
+        mesh = get_mesh()
+
+        (material, _) = create_material_from_vertex_material(mesh.name(), mesh.vert_materials[0])
+        active_pass = material.w3d_material_settings.passes[0]
+
+        active_pass.shader.custom_src = '2'
+        active_pass.shader.custom_dest = '5'
+        active_pass.shader.write_z = False
+        active_pass.shader.alpha_test = False
+        self.assertEqual('5', active_pass.shader.blend_mode)
+
+        active_pass.shader.custom_dest = '4'
+        self.assertEqual('8', active_pass.shader.blend_mode)
+
+    def test_shader_roundtrip_from_pass_settings(self):
+        mesh = get_mesh()
+
+        (material, _) = create_material_from_vertex_material(mesh.name(), mesh.vert_materials[0])
+        expected = mesh.shaders[0]
+        expected.alpha_test = 1
+        material.blend_mode = 6
+        set_shader_properties(material, expected)
+        populate_settings_from_material(material)
+        active_pass = material.w3d_material_settings.passes[0]
+        state = snapshot_material_state(material)
+        applied_blend_mode = None
+
+        try:
+            apply_pass_to_material(material, material.w3d_material_settings, active_pass)
+            applied_blend_mode = material.blend_mode
+            actual = retrieve_shader(material)
+        finally:
+            restore_material_state(material, state)
+
+        actual.texturing = 1
+        compare_shaders(self, expected, actual)
+        self.assertEqual(6, applied_blend_mode)
+
     def test_boxes_roundtrip(self):
         hlod = get_hlod()
         hlod.lod_arrays[0].sub_objects.append(get_hlod_sub_object(bone=1, name='containerName.WORLDBOX'))
@@ -258,6 +389,8 @@ class TestUtils(TestCase):
 
     def test_hlod_roundtrip(self):
         hlod = get_hlod()
+        hlod.aggregate_array = None
+        hlod.proxy_array = None
         boxes = [get_collision_box()]
         hierarchy = get_hierarchy()
         dazzles = [get_dazzle()]
@@ -268,8 +401,70 @@ class TestUtils(TestCase):
             get_mesh(name='PICK')]
 
         create_data(self, meshes, hlod, hierarchy, boxes, None, None, dazzles)
+        actual_hiera, _ = retrieve_hierarchy(self, 'containerName')
+        actual_hlod = create_hlod(actual_hiera, 'containerName')
+        identifiers = [sub_object.identifier for sub_object in actual_hlod.lod_arrays[0].sub_objects]
 
-        self.compare_data([], hlod, hierarchy)
+        self.assertEqual(1, len(actual_hlod.lod_arrays))
+        self.assertEqual(6, actual_hlod.lod_arrays[0].header.model_count)
+        self.assertEqual([
+            'containerName.sword',
+            'containerName.soldier',
+            'containerName.TRUNK',
+            'containerName.PICK',
+            'containerName.BOUNDINGBOX',
+            'containerName.Brakelight',
+        ], identifiers)
+
+    def test_hlod_roundtrip_with_aggregate_and_proxy_attachments(self):
+        hierarchy = get_hierarchy()
+        aggregate_sub_object = HLodSubObject(bone_index=7, identifier='agg_tree', name='agg_tree')
+        proxy_sub_object = HLodSubObject(bone_index=1, identifier='proxy_pad$1.5', name='proxy_pad$1.5')
+        hlod = HLod(
+            header=get_hlod_header('containerName', hierarchy.name(), lod_count=1),
+            lod_arrays=[HLodLodArray(
+                header=get_hlod_array_header(count=0),
+                sub_objects=[])],
+            aggregate_array=HLodAggregateArray(
+                header=get_hlod_array_header(count=1, size=0.0),
+                sub_objects=[aggregate_sub_object]),
+            proxy_array=HLodProxyArray(
+                header=get_hlod_array_header(count=1, size=0.0),
+                sub_objects=[proxy_sub_object]))
+
+        create_data(self, [], hlod, hierarchy)
+        actual_hiera, _ = retrieve_hierarchy(self, 'containerName')
+        actual_hlod = create_hlod(actual_hiera, 'containerName')
+        bone_indices = {pivot.name: index for index, pivot in enumerate(actual_hiera.pivots)}
+
+        self.assertEqual(1, actual_hlod.header.lod_count)
+        self.assertIsNotNone(actual_hlod.aggregate_array)
+        self.assertIsNotNone(actual_hlod.proxy_array)
+        self.assertEqual('agg_tree', actual_hlod.aggregate_array.sub_objects[0].identifier)
+        self.assertEqual('proxy_pad$1.5', actual_hlod.proxy_array.sub_objects[0].identifier)
+        self.assertEqual(bone_indices['sword_bone'], actual_hlod.aggregate_array.sub_objects[0].bone_index)
+        self.assertEqual(bone_indices['b_waist'], actual_hlod.proxy_array.sub_objects[0].bone_index)
+
+    def test_create_hlod_derives_proxy_identifier_from_object_name(self):
+        hierarchy = get_hierarchy()
+        create_data(self, [], None, hierarchy)
+
+        rig = bpy.data.objects[hierarchy.name()]
+        proxy = bpy.data.objects.new('proxy_pad$1.5~west', None)
+        bpy.context.scene.collection.objects.link(proxy)
+        proxy.parent = rig
+        proxy.parent_type = 'BONE'
+        proxy.parent_bone = 'b_waist'
+        proxy.w3d_object_settings.hlod_role = 'PROXY'
+
+        actual_hiera, _ = retrieve_hierarchy(self, 'containerName')
+        actual_hlod = create_hlod(actual_hiera, 'containerName')
+        bone_indices = {pivot.name: index for index, pivot in enumerate(actual_hiera.pivots)}
+
+        self.assertIsNotNone(actual_hlod.proxy_array)
+        self.assertEqual(1, len(actual_hlod.proxy_array.sub_objects))
+        self.assertEqual('proxy_pad$1.5', actual_hlod.proxy_array.sub_objects[0].identifier)
+        self.assertEqual(bone_indices['b_waist'], actual_hlod.proxy_array.sub_objects[0].bone_index)
 
     def test_mesh_only_roundtrip(self):
         hierarchy = get_hierarchy()

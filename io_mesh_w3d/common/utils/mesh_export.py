@@ -24,6 +24,7 @@ from io_mesh_w3d.common.utils.material_export import *
 from io_mesh_w3d.common.utils.object_settings_bridge import (
     should_export_geometry,
     apply_object_settings_to_header,
+    is_hlod_attachment,
 )
 from io_mesh_w3d.common.utils.material_settings_bridge import (
     apply_material_settings_to_legacy,
@@ -38,6 +39,7 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
     used_textures = []
     export_options = getattr(context, '_w3d_export_options', {}) or {}
     smooth_normals = export_options.get('smooth_vertex_normals', True)
+    apply_modifiers = export_options.get('apply_modifiers', True)
     deduplicate = export_options.get('deduplicate_reference_meshes', False)
     force_full = export_options.get('renegade_workflow', False)
     build_aabbtree = export_options.get('build_new_aabtree', True) or force_full
@@ -52,6 +54,8 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
 
     for mesh_object in get_objects('MESH'):
         if mesh_object.data.object_type != 'MESH':
+            continue
+        if is_hlod_attachment(mesh_object):
             continue
         if not should_export_geometry(mesh_object):
             continue
@@ -93,9 +97,15 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
             header.sort_level = mesh_object.data.sort_level
         mesh_struct.user_text = mesh_object.data.userText
 
-        temp_mesh = mesh_object.to_mesh(
-            preserve_all_data_layers=True,
-            depsgraph=depsgraph)
+        temp_mesh = None
+        evaluated_object = None
+        if apply_modifiers:
+            evaluated_object = mesh_object.evaluated_get(depsgraph)
+            temp_mesh = evaluated_object.to_mesh(
+                preserve_all_data_layers=True,
+                depsgraph=depsgraph)
+        else:
+            temp_mesh = mesh_object.data.copy()
         if temp_mesh is None:
             context.error(f"Failed to evaluate mesh '{mesh_object.name}' for export")
             continue
@@ -225,8 +235,13 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
                  mesh_object.bound_box[6][2]))
 
             for poly in mesh.polygons:
+                surface_type = 13
+                if 0 <= poly.material_index < len(mesh.materials):
+                    surface_type = resolve_triangle_surface_type(mesh.materials[poly.material_index])
+
                 triangle = Triangle(
                     vert_ids=list(poly.vertices),
+                    surface_type=surface_type,
                     normal=Vector(poly.normal))
 
                 vec1 = mesh.vertices[poly.vertices[0]].co
@@ -321,7 +336,8 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
                             mat_pass.shader_ids = [len(mesh_struct.shaders) - 1]
                             mat_pass.vertex_material_ids = [len(mesh_struct.vert_materials)]
 
-                            mesh_struct.vert_materials.append(retrieve_vertex_material(material, principled))
+                            mesh_struct.vert_materials.append(
+                                retrieve_vertex_material(material, principled, settings, pass_config))
 
                             if pass_config is None:
                                 base_col_tex = principled.base_color_texture
@@ -436,7 +452,11 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
             mesh_structs.append(mesh_struct)
 
         finally:
-            mesh_object.to_mesh_clear()
+            if apply_modifiers:
+                if evaluated_object is not None:
+                    evaluated_object.to_mesh_clear()
+            elif temp_mesh is not None:
+                bpy.data.meshes.remove(temp_mesh)
 
     switch_to_pose(rig, 'POSE')
 
@@ -464,6 +484,23 @@ def prepare_bmesh(context, mesh):
     b_mesh.to_mesh(mesh)
     mesh.update()
     return b_mesh
+
+
+def resolve_triangle_surface_type(material):
+    if material is None:
+        return 13
+
+    settings = getattr(material, 'w3d_material_settings', None)
+    if settings is not None:
+        try:
+            return int(settings.surface_type)
+        except (TypeError, ValueError):
+            pass
+
+    try:
+        return int(material.surface_type)
+    except (AttributeError, TypeError, ValueError):
+        return 13
 
 
 def build_aabb_tree(mesh_struct, max_polys_per_leaf=4):

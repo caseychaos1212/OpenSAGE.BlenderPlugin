@@ -71,6 +71,7 @@ def retrieve_data(context, export_settings):
     export_options = {
         'terrain_mode': terrain_mode,
         'smooth_vertex_normals': export_settings.get('smooth_vertex_normals', True),
+        'apply_modifiers': export_settings.get('apply_modifiers', True),
         'optimize_collision': export_settings.get('optimize_collision', True),
         'deduplicate_reference_meshes': export_settings.get('deduplicate_reference_meshes', False),
         'build_new_aabtree': export_settings.get('build_new_aabtree', True) or renegade_mode,
@@ -96,7 +97,11 @@ def retrieve_data(context, export_settings):
                 context, hierarchy, rig, container_name, export_settings.get('force_vertex_materials', False))
             data_context.meshes = meshes
             data_context.textures = textures
-            if not data_context.meshes:
+            has_hlod_attachments = bool(
+                data_context.hlod and (
+                    data_context.hlod.aggregate_array is not None
+                    or data_context.hlod.proxy_array is not None))
+            if not (data_context.meshes or data_context.collision_boxes or data_context.dazzles or has_hlod_attachments):
                 context.error('Scene does not contain any meshes, aborting export!')
                 return None
 

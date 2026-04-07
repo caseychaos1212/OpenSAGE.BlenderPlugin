@@ -89,7 +89,7 @@ class TestMeshImportUtils(TestCase):
             loop = [loop for loop in mesh.loops if loop.vertex_index == i][0]
             compare_vectors(self, expected_normals[i], loop.normal)
 
-    def test_unskinned_mesh_has_armature_as_parent(self):
+    def test_root_bound_unskinned_mesh_has_roottransform_bone_as_parent(self):
         mesh_name = 'soldier'
         mesh_struct = get_mesh(mesh_name)
 
@@ -114,8 +114,8 @@ class TestMeshImportUtils(TestCase):
         mesh = bpy.data.objects[mesh_name]
 
         self.assertEqual(rig, mesh.parent)
-        self.assertEqual('', mesh.parent_bone)
-        self.assertEqual('ARMATURE', mesh.parent_type)
+        self.assertEqual('ROOTTRANSFORM', mesh.parent_bone)
+        self.assertEqual('BONE', mesh.parent_type)
 
     def test_skinned_mesh_is_not_child_of_armature(self):
         mesh_name = 'soldier'

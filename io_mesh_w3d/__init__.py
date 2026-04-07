@@ -14,10 +14,12 @@ from bpy_extras import node_shader_utils
 from bpy_extras.io_utils import ImportHelper, ExportHelper
 from io_mesh_w3d.utils import ReportHelper
 from io_mesh_w3d.export_utils import save_data
+from io_mesh_w3d.import_logging import write_import_log
 from io_mesh_w3d.custom_properties import *
 from io_mesh_w3d.geometry_export import *
 from io_mesh_w3d.bone_volume_export import *
 from io_mesh_w3d.common.utils.material_settings_bridge import apply_pass_to_material
+from io_mesh_w3d.common.utils.object_settings_bridge import get_hlod_role
 
 W3D_PRESETS = [
     {
@@ -353,6 +355,11 @@ class ExportW3D(bpy.types.Operator, ExportHelper, ReportHelper):
         description='Match vertex normals along mesh seams before exporting',
         default=True)
 
+    apply_modifiers: BoolProperty(
+        name='Apply Blender modifiers',
+        description='Apply Blender modifier stack changes to meshes before exporting',
+        default=True)
+
     optimize_collision: BoolProperty(
         name='Optimise collision detection',
         description='Apply collision-optimisation heuristics before export',
@@ -405,6 +412,7 @@ class ExportW3D(bpy.types.Operator, ExportHelper, ReportHelper):
         'individual_files',
         'create_texture_xmls',
         'smooth_vertex_normals',
+        'apply_modifiers',
         'optimize_collision',
         'deduplicate_reference_meshes',
         'build_new_aabtree',
@@ -451,6 +459,7 @@ class ExportW3D(bpy.types.Operator, ExportHelper, ReportHelper):
             'individual_files': self.individual_files,
             'create_texture_xmls': self.create_texture_xmls,
             'smooth_vertex_normals': self.smooth_vertex_normals,
+            'apply_modifiers': self.apply_modifiers,
             'optimize_collision': self.optimize_collision,
             'deduplicate_reference_meshes': self.deduplicate_reference_meshes,
             'build_new_aabtree': self.build_new_aabtree,
@@ -499,6 +508,7 @@ class ExportW3D(bpy.types.Operator, ExportHelper, ReportHelper):
     def draw_processing_settings(self):
         col = self.layout.box().column()
         col.label(text='Geometry Processing')
+        col.prop(self, 'apply_modifiers')
         col.prop(self, 'smooth_vertex_normals')
         col.prop(self, 'optimize_collision')
         col.prop(self, 'deduplicate_reference_meshes')
@@ -542,24 +552,89 @@ class ImportW3D(bpy.types.Operator, ImportHelper, ReportHelper):
         name='Keep rigid meshes static',
         description='Reuse existing rigid meshes instead of reparenting them when importing animation data',
         default=False)
+    write_import_log: BoolProperty(
+        name='Write import log',
+        description='Write a sidecar log file with import messages and imported object state for version comparisons',
+        default=False)
+
+    def _finalize_import_state(self, pre_import_objects, pre_import_collections):
+        state = getattr(self, '_w3d_import_state', None) or {}
+        state.setdefault('source_path', self.filepath)
+
+        loaded_files = state.get('loaded_files') or list(getattr(self, '_w3d_loaded_files', []) or [])
+        if loaded_files:
+            state['loaded_files'] = loaded_files
+
+        created_objects = sorted(set(bpy.data.objects.keys()) - pre_import_objects)
+        created_collections = sorted(set(bpy.data.collections.keys()) - pre_import_collections)
+
+        if not state.get('object_names') and created_objects:
+            state['object_names'] = created_objects
+            state['capture_source'] = 'scene-diff'
+
+        if not state.get('collection_name') and created_collections:
+            state['collection_name'] = created_collections[0]
+
+        if not state.get('rig_name'):
+            for name in created_objects:
+                obj = bpy.data.objects.get(name)
+                if obj is not None and obj.type == 'ARMATURE':
+                    state['rig_name'] = name
+                    break
+
+        if not state.get('hierarchy_name') and state.get('rig_name'):
+            state['hierarchy_name'] = state['rig_name']
+
+        if not state.get('object_names') and state.get('collection_name'):
+            collection = bpy.data.collections.get(state['collection_name'])
+            if collection is not None:
+                collection_objects = getattr(collection, 'all_objects', collection.objects)
+                state['object_names'] = sorted({obj.name for obj in collection_objects})
+
+        if not state.get('capture_source'):
+            state['capture_source'] = 'loader'
+
+        self._w3d_import_state = state
 
     def execute(self, context):
         print_version(self.info)
+        self._w3d_log_buffer = [] if self.write_import_log else None
+        self._w3d_loaded_files = [] if self.write_import_log else None
+        self._w3d_import_state = None
+        pre_import_objects = set(bpy.data.objects.keys()) if self.write_import_log else set()
+        pre_import_collections = set(bpy.data.collections.keys()) if self.write_import_log else set()
         if self.filepath.lower().endswith('.w3d'):
             from .w3d.import_w3d import load
-            file_format = 'W3D'
-            load(self)
+            result = load(self)
         else:
             from .w3x.import_w3x import load
-            file_format = 'W3X'
-            load(self)
+            result = load(self)
 
-        self.info('finished')
-        return {'FINISHED'}
+        if result is None:
+            result = {'CANCELLED'}
+
+        log_path = None
+        if self.write_import_log:
+            self._finalize_import_state(pre_import_objects, pre_import_collections)
+            try:
+                log_path = write_import_log(self, context)
+            except Exception as exc:
+                self.warning(f'failed to write import log: {exc}')
+
+        self._w3d_import_state = None
+        self._w3d_loaded_files = None
+        self._w3d_log_buffer = None
+
+        if 'FINISHED' in result:
+            self.info('finished')
+        if log_path:
+            self.info(f'import log written: {log_path}')
+        return result
 
     def draw(self, context):
         layout = self.layout
         layout.prop(self, 'keep_rigid_meshes_static')
+        layout.prop(self, 'write_import_log')
 
 
 class W3D_OT_show_export_log(bpy.types.Operator):
@@ -1038,6 +1113,7 @@ class MESH_PROPERTIES_PANEL_PT_w3d(Panel):
         layout.use_property_split = True
         mesh = obj.data
         settings = getattr(obj, 'w3d_object_settings', None)
+        hlod_role = get_hlod_role(obj)
 
         type_box = layout.box()
         type_box.label(text='Object Classification')
@@ -1068,7 +1144,11 @@ class MESH_PROPERTIES_PANEL_PT_w3d(Panel):
         export_box.label(text='Export Options')
         export_box.prop(settings, 'export_transform')
         export_box.prop(settings, 'export_geometry')
-        export_box.prop(settings, 'geometry_type')
+        if hlod_role == 'LOD':
+            export_box.prop(settings, 'geometry_type')
+        else:
+            export_box.label(text='This mesh exports as an HLOD attachment only.', icon='INFO')
+            export_box.prop(settings, 'hlod_identifier')
         export_box.prop(settings, 'static_sort_level')
         export_box.prop(settings, 'screen_size')
         if settings.geometry_type == 'DAZZLE':
@@ -1109,6 +1189,41 @@ class MESH_PROPERTIES_PANEL_PT_w3d(Panel):
             layout.label(text='Set the mesh Object Type to DAZZLE for Dazzle geometry.', icon=warning_icon)
         if settings.geometry_type == 'BOX' and mesh.object_type != 'BOX':
             layout.label(text='Geometry Type is BOX but the mesh Object Type is not BOX.', icon=warning_icon)
+
+
+class OBJECT_PROPERTIES_PANEL_PT_w3d(Panel):
+    bl_label = 'W3D Object'
+    bl_space_type = 'PROPERTIES'
+    bl_region_type = 'WINDOW'
+    bl_context = 'object'
+
+    def draw(self, context):
+        obj = context.active_object
+        if obj is None:
+            return
+
+        settings = getattr(obj, 'w3d_object_settings', None)
+        if settings is None:
+            return
+
+        layout = self.layout
+        layout.use_property_split = True
+        layout.prop(settings, 'hlod_role')
+        layout.prop(settings, 'export_transform')
+        layout.prop(settings, 'export_geometry')
+
+        if settings.hlod_role != 'LOD':
+            layout.prop(settings, 'hlod_identifier')
+            info = layout.box()
+            info.label(text='Aggregate and Proxy objects export only as HLOD attachments.', icon='INFO')
+            if settings.hlod_role == 'PROXY':
+                info.label(text='Blank identifier uses the object name before "~".')
+        elif obj.type == 'EMPTY':
+            info = layout.box()
+            info.label(text='Empty objects only export through Aggregate or Proxy roles.', icon='INFO')
+
+        if settings.hlod_role == 'LOD' and settings.geometry_type == 'AGGREGATE':
+            layout.label(text='Legacy aggregate export is active via Geometry Type.', icon='INFO')
 
 
 class BONE_PROPERTIES_PANEL_PT_w3d(Panel):
@@ -1205,6 +1320,13 @@ class MATERIAL_PROPERTIES_PANEL_PT_w3d(Panel):
         def draw_vertex_tab(container):
             vertex = container.column()
             vertex.prop(active_pass, 'name', text='Pass Name')
+
+            notes_box = vertex.box()
+            notes_box.label(text='Interaction Notes', icon='INFO')
+            notes_box.label(text='If Emissive is non-black, keep Ambient and Diffuse black.')
+            notes_box.label(text='If Emissive is black, Ambient and Diffuse should usually match.')
+            notes_box.label(text='Opacity only shows through when the shader blend mode is not Opaque.')
+
             color_box = vertex.box()
             color_box.label(text='Vertex Material')
             color_box.prop(active_pass, 'ambient')
@@ -1217,9 +1339,20 @@ class MATERIAL_PROPERTIES_PANEL_PT_w3d(Panel):
             color_box.prop(active_pass, 'shininess')
 
             mapping = vertex.box()
-            mapping.label(text='Stage UV Channels')
-            mapping.prop(active_pass, 'uv_channel_stage0', text='Stage 0')
-            mapping.prop(active_pass, 'uv_channel_stage1', text='Stage 1')
+            mapping.label(text='Stage Mapping')
+            mapping.label(text='Mapper arguments are case-sensitive and comma-separated.', icon='INFO')
+
+            stage0_box = mapping.box()
+            stage0_box.label(text='Stage 0')
+            stage0_box.prop(active_pass, 'stage0_mapping', text='Mapping')
+            stage0_box.prop(active_pass, 'uv_channel_stage0', text='UV Channel')
+            stage0_box.prop(active_pass, 'stage0_args', text='Args')
+
+            stage1_box = mapping.box()
+            stage1_box.label(text='Stage 1')
+            stage1_box.prop(active_pass, 'stage1_mapping', text='Mapping')
+            stage1_box.prop(active_pass, 'uv_channel_stage1', text='UV Channel')
+            stage1_box.prop(active_pass, 'stage1_args', text='Args')
 
         def draw_shader_tab(container):
             shader_box = container.box()
@@ -1235,13 +1368,21 @@ class MATERIAL_PROPERTIES_PANEL_PT_w3d(Panel):
             shader_box.prop(active_pass.shader, 'detail_color')
             shader_box.prop(active_pass.shader, 'detail_alpha')
 
+        def draw_image_slot(container, owner, prop_name, label):
+            split = container.split(factor=0.4, align=True)
+            label_col = split.column()
+            label_col.alignment = 'RIGHT'
+            label_col.label(text=label)
+            field_col = split.column()
+            field_col.template_ID(owner, prop_name, open='image.open')
+
         def draw_stage(container, stage_settings, label):
             stage_box = container.box()
             header = stage_box.row(align=True)
             header.prop(stage_settings, 'enabled', text='', toggle=True)
             header.label(text=label)
-            stage_box.prop(stage_settings, 'texture')
-            stage_box.prop(stage_settings, 'alpha_bitmap', text='Alpha Bitmap')
+            draw_image_slot(stage_box, stage_settings, 'texture', 'Texture')
+            draw_image_slot(stage_box, stage_settings, 'alpha_bitmap', 'Alpha Bitmap')
             clamp_row = stage_box.row(align=True)
             clamp_row.prop(stage_settings, 'clamp_u', toggle=True)
             clamp_row.prop(stage_settings, 'clamp_v', toggle=True)
@@ -1338,6 +1479,7 @@ CLASSES = (
     W3DObjectSettings,
     W3DSceneSettings,
     ShaderProperties,
+    OBJECT_PROPERTIES_PANEL_PT_w3d,
     MESH_PROPERTIES_PANEL_PT_w3d,
     BONE_PROPERTIES_PANEL_PT_w3d,
     SCENE_PROPERTIES_PANEL_PT_w3d_workflow,

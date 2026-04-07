@@ -3,7 +3,11 @@
 
 from io_mesh_w3d.common.utils.helpers import *
 from io_mesh_w3d.w3d.structs.dazzle import *
-from io_mesh_w3d.common.utils.object_settings_bridge import get_object_settings
+from io_mesh_w3d.common.utils.object_settings_bridge import (
+    get_object_settings,
+    is_hlod_attachment,
+    should_export_geometry,
+)
 
 
 def retrieve_dazzles(container_name):
@@ -11,6 +15,8 @@ def retrieve_dazzles(container_name):
 
     for mesh_object in get_objects('MESH'):
         if mesh_object.data.object_type != 'DAZZLE':
+            continue
+        if is_hlod_attachment(mesh_object) or not should_export_geometry(mesh_object):
             continue
         name = container_name + '.' + mesh_object.name
         settings = get_object_settings(mesh_object)

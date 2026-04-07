@@ -92,6 +92,7 @@ def process_bone(bone, pivot_id_dict, hierarchy):
 def process_mesh(context, mesh, hierarchy, pivot_id_dict):
     if mesh.vertex_groups \
             or mesh.data.object_type == 'BOX' \
+            or mesh.data.object_type == 'DAZZLE' \
             or mesh.name in pick_plane_names \
             or mesh.name in pivot_id_dict.keys():
         return

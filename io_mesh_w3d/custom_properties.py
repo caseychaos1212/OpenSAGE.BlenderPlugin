@@ -56,6 +56,12 @@ W3D_GEOMETRY_TYPE_ITEMS = [
     ('CAM_Z_ORIENT', 'Cam Z-Oriented', 'Camera Z oriented billboard.'),
 ]
 
+W3D_HLOD_ROLE_ITEMS = [
+    ('LOD', 'LOD Geometry', 'Export this object as normal geometry and include it in the HLOD LOD arrays.'),
+    ('AGGREGATE', 'Aggregate', 'Export this object as an aggregate attachment entry only; no mesh chunk is written.'),
+    ('PROXY', 'Proxy', 'Export this object as a proxy attachment entry only; no mesh chunk is written.'),
+]
+
 W3D_STAGE_ANIM_ITEMS = [
     ('LOOP', 'Loop', 'Repeat animation indefinitely.'),
     ('PINGPONG', 'Ping Pong', 'Play forward then backward.'),
@@ -69,6 +75,188 @@ W3D_PASS_HINT_ITEMS = [
     ('ENVIRONMENT_MAP', 'Environment Map', 'Environment reflection.'),
     ('SHINYNESS_MAP', 'Shinyness Map', 'Specular/shininess data.'),
 ]
+
+W3D_BLEND_MODE_ITEMS = [
+    ('0', 'Opaque', 'Normal color or map with no alpha opacity and no blended overlay.'),
+    ('1', 'Add', 'Brighten the base color with additive blending.'),
+    ('2', 'Multiply', 'Multiply the base color by the blend color to darken the result.'),
+    ('3', 'Multiply and Add', 'Combine multiply-style darkening with additive brightening.'),
+    ('4', 'Screen', 'Similar to Add, but with a softer screen blend result.'),
+    ('5', 'Alpha Blend', 'Use the map alpha channel as grayscale opacity.'),
+    ('6', 'Alpha Test', 'Use a thresholded alpha channel for hard-edged opacity.'),
+    ('7', 'Alpha Test and Blend', 'Combine alpha-test and alpha-blend behavior.'),
+    ('8', 'Custom', 'Use the source and destination blend factors directly.'),
+]
+
+W3D_SOURCE_BLEND_ITEMS = [
+    ('0', 'Zero', 'Fragment is not added to the color buffer.'),
+    ('1', 'One', 'Fragment is added unmodified to the color buffer.'),
+    ('2', 'Src Alpha', 'Multiply fragment RGB by the fragment alpha channel.'),
+    ('3', '1-Src Alpha', 'Multiply fragment RGB by one minus the fragment alpha channel.'),
+]
+
+W3D_DEST_BLEND_ITEMS = [
+    ('0', 'Zero', 'Destination pixel does not contribute to blending.'),
+    ('1', 'One', 'Destination pixel is added unmodified.'),
+    ('2', 'Src Color', 'Destination pixel is multiplied by fragment RGB.'),
+    ('3', '1-Src Color', 'Destination pixel is multiplied by one minus fragment RGB.'),
+    ('4', 'Src Alpha', 'Destination pixel is multiplied by fragment alpha.'),
+    ('5', '1-Src Alpha', 'Destination pixel is multiplied by one minus fragment alpha.'),
+    ('6', 'Src Color PreFog', 'Destination pixel is multiplied by fragment RGB before fogging.'),
+]
+
+W3D_DEPTH_COMPARE_ITEMS = [
+    ('0', 'Pass Never', 'Never pass the depth comparison test.'),
+    ('1', 'Pass Less', 'Pass if the incoming depth is less than the stored depth.'),
+    ('2', 'Pass Equal', 'Pass if the incoming depth equals the stored depth.'),
+    ('3', 'Pass LEqual', 'Pass if the incoming depth is less than or equal to the stored depth.'),
+    ('4', 'Pass Greater', 'Pass if the incoming depth is greater than the stored depth.'),
+    ('5', 'Pass NEqual', 'Pass if the incoming depth is not equal to the stored depth.'),
+    ('6', 'Pass GEqual', 'Pass if the incoming depth is greater than or equal to the stored depth.'),
+    ('7', 'Pass Always', 'Always draw, ignoring the depth test result.'),
+]
+
+W3D_PRIMARY_GRADIENT_ITEMS = [
+    ('0', 'Disable', 'Disable diffuse-lighting contribution.'),
+    ('1', 'Modulate', 'Multiply pixel color by lighting color.'),
+    ('2', 'Add', 'Add lighting to the pixel color, useful for lightmaps.'),
+    ('3', 'BumpEnvMap', 'Use environment-mapped bump mapping.'),
+    ('5', 'Enable', 'Legacy enable mode.'),
+]
+
+W3D_SECONDARY_GRADIENT_ITEMS = [
+    ('0', 'Disable', 'Disable specular-lighting contribution.'),
+    ('1', 'Enable', 'Enable specular-lighting contribution.'),
+]
+
+W3D_DETAIL_COLOR_FUNC_ITEMS = [
+    ('0', 'Disable', 'Disable detail color contribution.'),
+    ('1', 'Detail', 'Override the stage 0 mapping with stage 1 color.'),
+    ('2', 'Scale', 'Keep whites unchanged while darker values darken the result.'),
+    ('3', 'InvScale', 'Use an inverse-scale blend that preserves brightness better than Add.'),
+    ('4', 'Add', 'Brighten the base color with additive overlay.'),
+    ('5', 'Sub', 'Darken the result with subtractive overlay.'),
+    ('6', 'SubR', 'Reverse subtractive blend.'),
+    ('7', 'Blend', 'Blend local and detail color using local alpha.'),
+    ('8', 'DetailBlend', 'Use the detail texture and self-illuminate it.'),
+    ('9', 'Alt', 'Alternate legacy detail color function.'),
+    ('10', 'DetailAlt', 'Alternate detail override function.'),
+    ('11', 'ScaleAlt', 'Alternate scale detail function.'),
+    ('12', 'InvScaleAlt', 'Alternate inverse-scale detail function.'),
+]
+
+W3D_DETAIL_ALPHA_FUNC_ITEMS = [
+    ('0', 'Disable', 'Disable stage 1 alpha contribution.'),
+    ('1', 'Detail', 'Override the alpha from stage 0.'),
+    ('2', 'Scale', 'Keep white unchanged while darker values darken the alpha result.'),
+    ('3', 'InvScale', 'Use inverse-scale alpha blending.'),
+]
+
+W3D_BLEND_MODE_PRESETS = {
+    '0': {'custom_src': '1', 'custom_dest': '0', 'write_z': True, 'alpha_test': False},
+    '1': {'custom_src': '1', 'custom_dest': '1', 'write_z': False, 'alpha_test': False},
+    '2': {'custom_src': '0', 'custom_dest': '2', 'write_z': False, 'alpha_test': False},
+    '3': {'custom_src': '1', 'custom_dest': '2', 'write_z': False, 'alpha_test': False},
+    '4': {'custom_src': '1', 'custom_dest': '3', 'write_z': False, 'alpha_test': False},
+    '5': {'custom_src': '2', 'custom_dest': '5', 'write_z': False, 'alpha_test': False},
+    '6': {'custom_src': '1', 'custom_dest': '0', 'write_z': True, 'alpha_test': True},
+    '7': {'custom_src': '2', 'custom_dest': '5', 'write_z': True, 'alpha_test': True},
+}
+
+_SHADER_BLEND_SYNC_GUARD = set()
+
+
+def _shader_guard_key(shader_settings):
+    try:
+        return shader_settings.as_pointer()
+    except Exception:
+        return None
+
+
+def _set_shader_blend_guard(shader_settings, enabled):
+    key = _shader_guard_key(shader_settings)
+    if key is None:
+        return
+    if enabled:
+        _SHADER_BLEND_SYNC_GUARD.add(key)
+    else:
+        _SHADER_BLEND_SYNC_GUARD.discard(key)
+
+
+def _shader_blend_guarded(shader_settings):
+    key = _shader_guard_key(shader_settings)
+    return key in _SHADER_BLEND_SYNC_GUARD if key is not None else False
+
+
+def _apply_blend_mode_preset(shader_settings):
+    if _shader_blend_guarded(shader_settings):
+        return
+    preset = W3D_BLEND_MODE_PRESETS.get(shader_settings.blend_mode)
+    if preset is None:
+        return
+    _set_shader_blend_guard(shader_settings, True)
+    try:
+        shader_settings.custom_src = preset['custom_src']
+        shader_settings.custom_dest = preset['custom_dest']
+        shader_settings.write_z = preset['write_z']
+        shader_settings.alpha_test = preset['alpha_test']
+    finally:
+        _set_shader_blend_guard(shader_settings, False)
+
+
+def _infer_blend_mode(shader_settings):
+    for blend_mode, preset in W3D_BLEND_MODE_PRESETS.items():
+        if (
+            shader_settings.custom_src == preset['custom_src']
+            and shader_settings.custom_dest == preset['custom_dest']
+            and bool(shader_settings.write_z) == preset['write_z']
+            and bool(shader_settings.alpha_test) == preset['alpha_test']
+        ):
+            return blend_mode
+    return '8'
+
+
+def _sync_blend_mode_from_controls(shader_settings):
+    if _shader_blend_guarded(shader_settings):
+        return
+    inferred = _infer_blend_mode(shader_settings)
+    if shader_settings.blend_mode == inferred:
+        return
+    _set_shader_blend_guard(shader_settings, True)
+    try:
+        shader_settings.blend_mode = inferred
+    finally:
+        _set_shader_blend_guard(shader_settings, False)
+
+W3D_VERTEX_MAPPER_TYPES = [
+    (0x00, 'UV', 'Use authored UV coordinates.'),
+    (0x01, 'Environment', 'Use normals to generate environment-map coordinates.'),
+    (0x02, 'Classic Environment', 'Use reflection-based environment mapping with stronger contrast.'),
+    (0x03, 'Screen', 'Use screen coordinates so the map always faces the camera.'),
+    (0x04, 'Linear Offset', 'Scroll the map over time with UPerSec and VPerSec arguments.'),
+    (0x05, 'Silhouette', 'Obsolete legacy mapper; not supported in the classic docs.'),
+    (0x06, 'Scale', 'Scale UV coordinates with UScale and VScale arguments.'),
+    (0x07, 'Grid', 'Animate a grid bitmap with FPS and Log2Width arguments.'),
+    (0x08, 'Rotate', 'Rotate coordinates with Speed, UCenter, and VCenter arguments.'),
+    (0x09, 'Sine', 'Move coordinates in a lissajous pattern with amplitude, frequency, and phase arguments.'),
+    (0x0A, 'Step', 'Move coordinates in discrete steps with UStep, VStep, and SPS arguments.'),
+    (0x0B, 'Zigzag', 'Scroll coordinates and periodically reverse direction.'),
+    (0x0C, 'WS Classic Environment', 'Use world-space normal environment mapping.'),
+    (0x0D, 'WS Environment', 'Use world-space reflection environment mapping.'),
+    (0x0E, 'Grid Classic Environment', 'Animate a grid bitmap using classic environment mapping.'),
+    (0x0F, 'Grid Environment', 'Animate a grid bitmap using environment mapping.'),
+    (0x10, 'Random', 'Apply random step-like offsets and rotations.'),
+    (0x11, 'Edge', 'Use the bitmap top row for fuzzy edge or glow-like effects.'),
+    (0x12, 'Bump Environment', 'Use environment-mapped bump mapping.'),
+]
+
+
+def _build_stage_mapping_items(shift):
+    return [(f'0x{code << shift:08X}', label, description) for code, label, description in W3D_VERTEX_MAPPER_TYPES]
+
+
+W3D_STAGE0_MAPPING_ITEMS = _build_stage_mapping_items(16)
+W3D_STAGE1_MAPPING_ITEMS = _build_stage_mapping_items(8)
 
 
 def _load_dazzle_items():
@@ -160,11 +348,26 @@ def get_dazzle_enum_items(self, context):
 class W3DStageSettings(PropertyGroup):
     enabled: BoolProperty(name='Enabled', default=False)
     texture: PointerProperty(name='Texture', type=bpy.types.Image)
-    clamp_u: BoolProperty(name='Clamp U', default=False)
-    clamp_v: BoolProperty(name='Clamp V', default=False)
-    no_lod: BoolProperty(name='No LOD', default=False)
-    publish: BoolProperty(name='Publish', default=False)
-    display: BoolProperty(name='Display', default=False)
+    clamp_u: BoolProperty(
+        name='Clamp U',
+        description='Clamp texture sampling on the U axis instead of wrapping.',
+        default=False)
+    clamp_v: BoolProperty(
+        name='Clamp V',
+        description='Clamp texture sampling on the V axis instead of wrapping.',
+        default=False)
+    no_lod: BoolProperty(
+        name='No LOD',
+        description='Disable texture mip/LOD selection for this stage.',
+        default=False)
+    publish: BoolProperty(
+        name='Publish',
+        description='Mark this stage texture for export/publish in the W3D material data.',
+        default=False)
+    display: BoolProperty(
+        name='Display',
+        description='Use this enabled stage as the display texture pushed to the Blender material preview.',
+        default=False)
     frames: IntProperty(name='Frames', default=1, min=0, max=999)
     fps: FloatProperty(name='FPS', default=15.0, min=0.0, max=120.0)
     animation_mode: EnumProperty(
@@ -179,22 +382,66 @@ class W3DStageSettings(PropertyGroup):
 
 
 class W3DShaderSettings(PropertyGroup):
-    blend_mode: IntProperty(name='Blend Mode', default=0, min=0)
-    custom_src: IntProperty(name='Source Blend', default=1, min=0)
-    custom_dest: IntProperty(name='Destination Blend', default=0, min=0)
-    write_z: BoolProperty(name='Write Z', default=True)
-    alpha_test: BoolProperty(name='Alpha Test', default=False)
-    pri_gradient: IntProperty(name='Primary Gradient', default=1, min=0)
-    sec_gradient: IntProperty(name='Secondary Gradient', default=0, min=0)
-    depth_compare: IntProperty(name='Depth Compare', default=3, min=0)
-    detail_color: IntProperty(name='Detail Color Func', default=0, min=0)
-    detail_alpha: IntProperty(name='Detail Alpha Func', default=0, min=0)
+    blend_mode: EnumProperty(
+        name='Blend Mode',
+        description='Named blend-mode preset from the classic W3D shader tab.',
+        items=W3D_BLEND_MODE_ITEMS,
+        default='0',
+        update=lambda self, _context: _apply_blend_mode_preset(self))
+    custom_src: EnumProperty(
+        name='Source Blend',
+        description='Source blend factor used by the shader blend equation.',
+        items=W3D_SOURCE_BLEND_ITEMS,
+        default='1',
+        update=lambda self, _context: _sync_blend_mode_from_controls(self))
+    custom_dest: EnumProperty(
+        name='Destination Blend',
+        description='Destination blend factor used by the shader blend equation.',
+        items=W3D_DEST_BLEND_ITEMS,
+        default='0',
+        update=lambda self, _context: _sync_blend_mode_from_controls(self))
+    write_z: BoolProperty(
+        name='Write Z',
+        description='Enable depth-buffer writes for this pass.',
+        default=True,
+        update=lambda self, _context: _sync_blend_mode_from_controls(self))
+    alpha_test: BoolProperty(
+        name='Alpha Test',
+        description='Enable alpha testing for this pass.',
+        default=False,
+        update=lambda self, _context: _sync_blend_mode_from_controls(self))
+    pri_gradient: EnumProperty(
+        name='Primary Gradient',
+        description='Control how diffuse lighting affects the first stage.',
+        items=W3D_PRIMARY_GRADIENT_ITEMS,
+        default='1')
+    sec_gradient: EnumProperty(
+        name='Secondary Gradient',
+        description='Control whether specular-light contribution is enabled.',
+        items=W3D_SECONDARY_GRADIENT_ITEMS,
+        default='0')
+    depth_compare: EnumProperty(
+        name='Depth Compare',
+        description='Choose how this pass compares against the Z buffer.',
+        items=W3D_DEPTH_COMPARE_ITEMS,
+        default='3')
+    detail_color: EnumProperty(
+        name='Detail Color Func',
+        description='Choose how stage 1 color combines with stage 0.',
+        items=W3D_DETAIL_COLOR_FUNC_ITEMS,
+        default='0')
+    detail_alpha: EnumProperty(
+        name='Detail Alpha Func',
+        description='Choose how stage 1 alpha combines with stage 0.',
+        items=W3D_DETAIL_ALPHA_FUNC_ITEMS,
+        default='0')
 
 
 class W3DMaterialPass(PropertyGroup):
     name: StringProperty(name='Pass Name', default='Pass')
     ambient: FloatVectorProperty(
         name='Ambient',
+        description='Color of the shaded portion of the mesh. For in-game vertex coloring, keep this equal to Diffuse when Emissive is black.',
         subtype='COLOR',
         size=4,
         default=(1.0, 1.0, 1.0, 1.0),
@@ -202,6 +449,7 @@ class W3DMaterialPass(PropertyGroup):
         max=1.0)
     diffuse: FloatVectorProperty(
         name='Diffuse',
+        description='Base color reflected by lighting. For in-game vertex coloring, match Ambient when Emissive is black.',
         subtype='COLOR',
         size=4,
         default=(1.0, 1.0, 1.0, 1.0),
@@ -209,6 +457,7 @@ class W3DMaterialPass(PropertyGroup):
         max=1.0)
     specular: FloatVectorProperty(
         name='Specular',
+        description='Specular highlight color. Classic W3D docs mark this as effectively disabled for most assets.',
         subtype='COLOR',
         size=3,
         default=(0.0, 0.0, 0.0),
@@ -216,17 +465,64 @@ class W3DMaterialPass(PropertyGroup):
         max=1.0)
     emissive: FloatVectorProperty(
         name='Emissive',
+        description='Self-illuminated color. If Emissive is non-black, Ambient and Diffuse should usually be black for in-game vertex coloring.',
         subtype='COLOR',
         size=3,
         default=(0.0, 0.0, 0.0),
         min=0.0,
         max=1.0)
-    specular_to_diffuse: BoolProperty(name='Specular to Diffuse', default=False)
-    opacity: FloatProperty(name='Opacity', default=1.0, min=0.0, max=1.0)
-    translucency: FloatProperty(name='Translucency', default=0.0, min=0.0, max=1.0)
-    shininess: FloatProperty(name='Shininess', default=0.0, min=0.0, max=100.0)
-    uv_channel_stage0: IntProperty(name='Stage 0 UV Channel', default=1, min=1, max=99)
-    uv_channel_stage1: IntProperty(name='Stage 1 UV Channel', default=1, min=1, max=99)
+    specular_to_diffuse: BoolProperty(
+        name='Specular to Diffuse',
+        description='Obsolete legacy option. When enabled it exports the Copy Specular To Diffuse vertex-material flag.',
+        default=False)
+    opacity: FloatProperty(
+        name='Opacity',
+        description='1.0 is fully opaque and 0.0 is fully transparent. Visible transparency still depends on the shader blend mode.',
+        default=1.0,
+        min=0.0,
+        max=1.0)
+    translucency: FloatProperty(
+        name='Translucency',
+        description='Legacy translucency value kept for round-trip compatibility.',
+        default=0.0,
+        min=0.0,
+        max=1.0)
+    shininess: FloatProperty(
+        name='Shininess',
+        description='Controls the tightness of specular highlights in the vertex material.',
+        default=0.0,
+        min=0.0,
+        max=100.0)
+    stage0_mapping: EnumProperty(
+        name='Stage 0 Mapping',
+        description='Choose how stage 0 generates its texture coordinates.',
+        items=W3D_STAGE0_MAPPING_ITEMS,
+        default='0x00000000')
+    stage1_mapping: EnumProperty(
+        name='Stage 1 Mapping',
+        description='Choose how stage 1 generates its texture coordinates.',
+        items=W3D_STAGE1_MAPPING_ITEMS,
+        default='0x00000000')
+    stage0_args: StringProperty(
+        name='Stage 0 Args',
+        description='Comma-separated, case-sensitive mapper arguments for stage 0, for example UPerSec=-0.3, VPerSec=5.0.',
+        default='')
+    stage1_args: StringProperty(
+        name='Stage 1 Args',
+        description='Comma-separated, case-sensitive mapper arguments for stage 1, for example FPS=29.5, Log2Width=2.',
+        default='')
+    uv_channel_stage0: IntProperty(
+        name='Stage 0 UV Channel',
+        description='1-based UV channel used when the stage reads authored UV coordinates.',
+        default=1,
+        min=1,
+        max=99)
+    uv_channel_stage1: IntProperty(
+        name='Stage 1 UV Channel',
+        description='1-based UV channel used when the stage reads authored UV coordinates.',
+        default=1,
+        min=1,
+        max=99)
     stage0: PointerProperty(name='Stage 0', type=W3DStageSettings)
     stage1: PointerProperty(name='Stage 1', type=W3DStageSettings)
     shader: PointerProperty(name='Shader Settings', type=W3DShaderSettings)
@@ -303,6 +599,15 @@ class W3DMaterialSettings(PropertyGroup):
 class W3DObjectSettings(PropertyGroup):
     export_transform: BoolProperty(name='Export Transform', default=True)
     export_geometry: BoolProperty(name='Export Geometry', default=True)
+    hlod_role: EnumProperty(
+        name='HLOD Role',
+        description='Choose whether this object exports as regular geometry, an aggregate attachment, or a proxy attachment',
+        items=W3D_HLOD_ROLE_ITEMS,
+        default='LOD')
+    hlod_identifier: StringProperty(
+        name='Attachment Identifier',
+        description='Exact identifier written to the HLOD aggregate/proxy array. Leave blank to use the object name; proxies strip everything after "~" so unique Blender suffixes do not affect export',
+        default='')
     geometry_type: EnumProperty(
         name='Geometry Type',
         items=W3D_GEOMETRY_TYPE_ITEMS,
@@ -563,51 +868,13 @@ Material.translucency = FloatProperty(
 Material.stage0_mapping = EnumProperty(
     name='Stage 0 Mapping',
     description='defines the stage mapping type of this material',
-    items=[
-        ('0x00000000', 'UV', 'desc: todo'),
-        ('0x00010000', 'Environment', 'desc: todo'),
-        ('0x00020000', 'Cheap Environment', 'desc: todo'),
-        ('0x00030000', 'Screen', 'desc: todo'),
-        ('0x00040000', 'Linear Offset', 'desc: todo'),
-        ('0x00050000', 'Silhouette', 'desc: todo'),
-        ('0x00060000', 'Scale', 'desc: todo'),
-        ('0x00070000', 'Grid', 'desc: todo'),
-        ('0x00080000', 'Rotate', 'desc: todo'),
-        ('0x00090000', 'Sine Linear Offset', 'desc: todo'),
-        ('0x000A0000', 'Step Linear Offset', 'desc: todo'),
-        ('0x000B0000', 'Zigzag Linear Offset', 'desc: todo'),
-        ('0x000C0000', 'WS Classic Environment', 'desc: todo'),
-        ('0x000D0000', 'WS Environment', 'desc: todo'),
-        ('0x000E0000', 'Grid Classic Environment', 'desc: todo'),
-        ('0x000F0000', 'Grid Environment', 'desc: todo'),
-        ('0x00100000', 'Random', 'desc: todo'),
-        ('0x00110000', 'Edge', 'desc: todo'),
-        ('0x00120000', 'Bump Environment', 'desc: todo')],
+    items=W3D_STAGE0_MAPPING_ITEMS,
     default='0x00000000')
 
 Material.stage1_mapping = EnumProperty(
     name='Stage 1 Mapping',
     description='defines the stage mapping type of this material',
-    items=[
-        ('0x00000000', 'UV', 'desc: todo'),
-        ('0x00000100', 'Environment', 'desc: todo'),
-        ('0x00000200', 'Cheap Environment', 'desc: todo'),
-        ('0x00000300', 'Screen', 'desc: todo'),
-        ('0x00000400', 'Linear Offset', 'desc: todo'),
-        ('0x00000500', 'Silhouette', 'desc: todo'),
-        ('0x00000600', 'Scale', 'desc: todo'),
-        ('0x00000700', 'Grid', 'desc: todo'),
-        ('0x00000800', 'Rotate', 'desc: todo'),
-        ('0x00000900', 'Sine Linear Offset', 'desc: todo'),
-        ('0x00000A00', 'Step Linear Offset', 'desc: todo'),
-        ('0x00000B00', 'Zigzag Linear Offset', 'desc: todo'),
-        ('0x00000C00', 'WS Classic Environment', 'desc: todo'),
-        ('0x00000D00', 'WS Environment', 'desc: todo'),
-        ('0x00000E00', 'Grid Classic Environment', 'desc: todo'),
-        ('0x00000F00', 'Grid Environment', 'desc: todo'),
-        ('0x00001000', 'Random', 'desc: todo'),
-        ('0x00001100', 'Edge', 'desc: todo'),
-        ('0x00001200', 'Bump Environment', 'desc: todo')],
+    items=W3D_STAGE1_MAPPING_ITEMS,
     default='0x00000000')
 
 Material.vm_args_0 = StringProperty(
@@ -653,7 +920,7 @@ Material.blend_mode = IntProperty(
     description='Which blend mode should be used',
     default=0,
     min=0,
-    max=5)
+    max=8)
 
 Material.bump_uv_scale = FloatVectorProperty(
     name='Bump UV Scale',
@@ -851,15 +1118,7 @@ class ShaderProperties(PropertyGroup):
     depth_compare: EnumProperty(
         name='Depth Compare',
         description='Describes how to depth check this material',
-        items=[
-            ('0', 'PASS_NEVER', 'pass never (i.e. always fail depth comparison test)'),
-            ('1', 'PASS_LESS', 'pass if incoming less than stored'),
-            ('2', 'PASS_EQUAL', 'pass if incoming equal to stored'),
-            ('3', 'PASS_LEQUAL', 'pass if incoming less than or equal to stored (default)'),
-            ('4', 'PASS_GREATER', 'pass if incoming greater than stored'),
-            ('5', 'PASS_NOTEQUAL', 'pass if incoming not equal to stored'),
-            ('6', 'PASS_GEQUAL', 'pass if incoming greater than or equal to stored'),
-            ('7', 'PASS_ALWAYS', 'pass always')],
+        items=W3D_DEPTH_COMPARE_ITEMS,
         default='3')
 
     depth_mask: EnumProperty(
@@ -875,18 +1134,7 @@ class ShaderProperties(PropertyGroup):
     dest_blend: EnumProperty(
         name='Destination Blendfunc',
         description='Describes how this material blends',
-        items=[
-            ('0', 'Zero', 'destination pixel doesn\'t affect blending (default)'),
-            ('1', 'One', 'destination pixel added unmodified'),
-            ('2', 'SrcColor', 'destination pixel multiplied by fragment RGB components'),
-            ('3', 'OneMinusSrcColor',
-             'destination pixel multiplied by one minus (i.e. inverse) fragment RGB components'),
-            ('4', 'SrcAlpha', 'destination pixel multiplied by fragment alpha component'),
-            ('5', 'OneMinusSrcAlpha',
-             'destination pixel multiplied by one minus (i.e. inverse) fragment alpha component'),
-            ('6', 'SrcColorPreFog',
-             'destination pixel multiplied by fragment RGB components prior to fogging'),
-        ],
+        items=W3D_DEST_BLEND_ITEMS,
         default='0')
 
     fog_func: IntProperty(min=0, max=255, name='Fog function')
@@ -894,61 +1142,29 @@ class ShaderProperties(PropertyGroup):
     pri_gradient: EnumProperty(
         name='Primary Gradient',
         description='Specify the primary gradient',
-        items=[
-            ('0', 'Disable', 'disable primary gradient (same as OpenGL \'decal\' texture blend)'),
-            ('1', 'Modulate', 'modulate fragment ARGB by gradient ARGB (default)'),
-            ('2', 'Add', 'add gradient RGB to fragment RGB, copy gradient A to fragment A'),
-            ('3', 'BumpEnvMap', 'environment-mapped bump mapping'),
-            ('5', 'Enable', '')],
+        items=W3D_PRIMARY_GRADIENT_ITEMS,
         default='1')
 
     sec_gradient: EnumProperty(
         name='Secondary Gradient',
         description='Specify the primary gradient',
-        items=[
-            ('0', 'Disable', 'don\'t draw secondary gradient (default)'),
-            ('1', 'Enable', 'add secondary gradient RGB to fragment RGB')],
+        items=W3D_SECONDARY_GRADIENT_ITEMS,
         default='0')
 
     src_blend: EnumProperty(
         name='Source Blendfunc',
         description='Describes how this material blends',
-        items=[
-            ('0', 'Zero', 'fragment not added to color buffer'),
-            ('1', 'One', 'fragment added unmodified to color buffer (default)'),
-            ('2', 'SrcAlpha', 'fragment RGB components multiplied by fragment A'),
-            ('3', 'OneMinusSrcAlpha',
-             'fragment RGB components multiplied by fragment inverse (one minus) A'),
-        ],
+        items=W3D_SOURCE_BLEND_ITEMS,
         default='1')
 
     detail_color_func: EnumProperty(
         name='Detail color function',
-        items=[
-            ('0', 'Disable', 'local (default)'),
-            ('1', 'Detail', 'other'),
-            ('2', 'Scale', 'local * other'),
-            ('3', 'InvScale', '~(~local * ~other) = local + (1-local)*other'),
-            ('4', 'Add', 'local + other'),
-            ('5', 'Sub', 'local - other'),
-            ('6', 'SubR', 'other - local'),
-            ('7', 'Blend', '(localAlpha)*local + (~localAlpha)*other'),
-            ('8', 'DetailBlend', '(otherAlpha)*local + (~otherAlpha)*other'),
-            ('9', 'Alt', ''),
-            ('10', 'DetailAlt', ''),
-            ('11', 'ScaleAlt', ''),
-            ('12', 'InvScaleAlt', ''),
-        ],
+        items=W3D_DETAIL_COLOR_FUNC_ITEMS,
         default='0')
 
     detail_alpha_func: EnumProperty(
         name='Detail alpha function',
-        items=[
-            ('0', 'Disable', 'local (default)'),
-            ('1', 'Detail', 'other'),
-            ('2', 'Scale', 'local * other'),
-            ('3', 'InvScale', '~(~local * ~other) = local + (1-local)*other'),
-        ],
+        items=W3D_DETAIL_ALPHA_FUNC_ITEMS,
         default='0')
 
     shader_preset: IntProperty(min=0, max=255, name="Shader presets")

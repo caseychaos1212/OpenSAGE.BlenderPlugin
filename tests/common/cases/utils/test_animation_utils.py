@@ -10,6 +10,7 @@ from io_mesh_w3d.common.utils.animation_import import *
 from io_mesh_w3d.common.utils.animation_export import *
 from tests.common.helpers.mesh import *
 from tests.common.helpers.hierarchy import *
+from tests.common.helpers.hlod import *
 from tests.common.helpers.animation import *
 from tests.w3d.helpers.compressed_animation import *
 from tests.utils import *
@@ -115,6 +116,78 @@ class TestAnimationUtils(TestCase):
         bpy.context.scene.frame_set(channel.first_frame)
         actual = rig.pose.bones[hierarchy.pivots[channel.pivot].name].rotation_quaternion
         self.assertAlmostEqual(1.0, abs(actual.dot(channel.data[0])), 4)
+
+    def test_rigid_child_rotation_channels_keep_first_key_as_baseline(self):
+        hierarchy = get_hierarchy()
+        hierarchy.pivots = [get_roottransform(), get_hierarchy_pivot(name='rigid_bone', parent=0)]
+        hierarchy.header.num_pivots = len(hierarchy.pivots)
+
+        sub_object = get_hlod_sub_object(bone=1, name='containerName.rigid_mesh')
+        create_mesh(self, get_mesh('rigid_mesh'), get_collection(), hierarchy, sub_object)
+
+        rig = get_or_create_skeleton(hierarchy, get_collection())
+        rigid_mesh = bpy.data.objects['rigid_mesh']
+        rig_object(rigid_mesh, hierarchy, rig, sub_object)
+
+        animation = get_animation_empty()
+        channel = get_animation_channel(type=CHANNEL_Q, pivot=1)
+        channel.first_frame = 2
+        channel.last_frame = 3
+        channel.data = [
+            get_quat(0.9238795, 0.0, 0.3826834, 0.0),
+            get_quat(0.7071068, 0.0, 0.7071068, 0.0)]
+        animation.channels = [channel]
+
+        create_animation(self, rig, animation, hierarchy)
+
+        bpy.context.scene.frame_set(0)
+        expected_location, expected_rotation, _ = rigid_mesh.matrix_world.decompose()
+        bpy.context.scene.frame_set(channel.first_frame)
+        actual = rig.pose.bones[hierarchy.pivots[channel.pivot].name].rotation_quaternion
+        self.assertAlmostEqual(1.0, abs(actual.dot(Quaternion((1.0, 0.0, 0.0, 0.0)))), 4)
+
+        actual_location, actual_rotation, _ = rigid_mesh.matrix_world.decompose()
+        for index in range(3):
+            self.assertAlmostEqual(expected_location[index], actual_location[index], 4)
+        self.assertAlmostEqual(1.0, abs(actual_rotation.dot(expected_rotation)), 4)
+
+    def test_root_bound_rigid_mesh_stays_undeformed_when_other_bone_animates(self):
+        hierarchy = get_hierarchy()
+        hierarchy.pivots = [get_roottransform(), get_hierarchy_pivot(name='animated_bone', parent=0)]
+        hierarchy.header.num_pivots = len(hierarchy.pivots)
+
+        root_sub_object = get_hlod_sub_object(bone=0, name='containerName.root_mesh')
+        animated_sub_object = get_hlod_sub_object(bone=1, name='containerName.animated_mesh')
+
+        create_mesh(self, get_mesh('root_mesh'), get_collection(), hierarchy, root_sub_object)
+        create_mesh(self, get_mesh('animated_mesh'), get_collection(), hierarchy, animated_sub_object)
+
+        rig = get_or_create_skeleton(hierarchy, get_collection())
+        root_mesh = bpy.data.objects['root_mesh']
+        animated_mesh = bpy.data.objects['animated_mesh']
+        rig_object(root_mesh, hierarchy, rig, root_sub_object)
+        rig_object(animated_mesh, hierarchy, rig, animated_sub_object)
+
+        animation = get_animation_empty()
+        translation_channel = get_animation_channel(type=CHANNEL_X, pivot=1)
+        translation_channel.first_frame = 1
+        translation_channel.last_frame = 2
+        translation_channel.data = [1.0, 2.0]
+        animation.channels = [translation_channel]
+
+        create_animation(self, rig, animation, hierarchy)
+
+        bpy.context.scene.frame_set(0)
+        initial_dimensions = root_mesh.dimensions.copy()
+        initial_location = root_mesh.matrix_world.translation.copy()
+
+        bpy.context.scene.frame_set(2)
+        animated_location = root_mesh.matrix_world.translation.copy()
+        animated_dimensions = root_mesh.dimensions.copy()
+
+        for index in range(3):
+            self.assertAlmostEqual(initial_dimensions[index], animated_dimensions[index], 4)
+            self.assertAlmostEqual(initial_location[index], animated_location[index], 4)
 
     def test_quaternions_are_normalized_on_export_uncompressed(self):
         bpy.context.scene.frame_end = 0

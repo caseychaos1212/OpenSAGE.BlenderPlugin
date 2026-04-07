@@ -31,6 +31,7 @@ _REN_GEOMETRY_TO_OBJECT_TYPE = {
     'OBBOX': 'BOX',
 }
 _REN_ALLOWED_TYPES = {'MESH', 'BOX', 'DAZZLE'}
+_HLOD_ATTACHMENT_ROLES = {'AGGREGATE', 'PROXY'}
 
 
 def _get_scene(context=None, scene=None, obj=None):
@@ -97,6 +98,37 @@ def sync_scene_object_types(scene=None, context=None):
 
 def get_object_settings(obj):
     return getattr(obj, 'w3d_object_settings', None)
+
+
+def get_hlod_role(obj):
+    settings = get_object_settings(obj)
+    if settings is None:
+        return 'LOD'
+
+    role = getattr(settings, 'hlod_role', 'LOD')
+    if role == 'LOD' and getattr(settings, 'geometry_type', None) == 'AGGREGATE':
+        return 'AGGREGATE'
+    return role
+
+
+def is_hlod_attachment(obj):
+    return get_hlod_role(obj) in _HLOD_ATTACHMENT_ROLES
+
+
+def get_hlod_identifier(obj):
+    settings = get_object_settings(obj)
+    identifier = ''
+    if settings is not None:
+        identifier = (getattr(settings, 'hlod_identifier', '') or '').strip()
+    if identifier:
+        return identifier
+
+    name = getattr(obj, 'name', '') or ''
+    if get_hlod_role(obj) == 'PROXY':
+        proxy_name = name.split('~', 1)[0].strip()
+        if proxy_name:
+            return proxy_name
+    return name
 
 
 def should_export_geometry(obj):
