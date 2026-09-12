@@ -1,9 +1,9 @@
 # <pep8 compliant>
 # Written by Stephan Vedder and Michael Schnabel
 
-from io_mesh_w3d.common.utils.helpers import *
-from io_mesh_w3d.w3d.structs.dazzle import *
-from io_mesh_w3d.common.utils.object_settings_bridge import (
+from ...common.utils.helpers import *
+from ...w3d.structs.dazzle import *
+from ...common.utils.object_settings_bridge import (
     get_object_settings,
     is_hlod_attachment,
     should_export_geometry,

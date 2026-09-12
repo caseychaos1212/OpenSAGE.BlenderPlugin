@@ -3,9 +3,9 @@
 
 import bpy
 
-from io_mesh_w3d.common.utils.helpers import *
-from io_mesh_w3d.common.structs.hlod import *
-from io_mesh_w3d.common.utils.object_settings_bridge import (
+from ...common.utils.helpers import *
+from ...common.structs.hlod import *
+from ...common.utils.object_settings_bridge import (
     get_hlod_identifier,
     get_hlod_role,
     get_screen_size,

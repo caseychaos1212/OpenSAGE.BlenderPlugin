@@ -3,9 +3,9 @@
 
 import bpy
 from bpy_extras import node_shader_utils
-from io_mesh_w3d.common.utils.primitives import *
-from io_mesh_w3d.common.utils.helpers import *
-from io_mesh_w3d.common.utils.object_settings_bridge import populate_object_settings_for_dazzle
+from ...common.utils.primitives import *
+from ...common.utils.helpers import *
+from ...common.utils.object_settings_bridge import populate_object_settings_for_dazzle
 
 
 def create_dazzle(context, dazzle, coll):
@@ -17,9 +17,9 @@ def create_dazzle(context, dazzle, coll):
     link_object_to_active_scene(dazzle_cone, coll)
 
     material = bpy.data.materials.new(dazzle.name())
-    material.use_nodes = True
-    material.blend_method = 'BLEND'
-    material.show_transparent_back = False
+    enable_nodes(material)
+    set_blend_method(material, 'BLEND')
+    set_transparency_overlap(material, False)
 
     principled = node_shader_utils.PrincipledBSDFWrapper(material, is_readonly=False)
     principled.base_color = (255, 255, 255)

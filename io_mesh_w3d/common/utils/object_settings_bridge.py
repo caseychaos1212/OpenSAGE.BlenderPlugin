@@ -4,7 +4,7 @@
 
 import bpy
 
-from io_mesh_w3d.common.structs.mesh import (
+from ...common.structs.mesh import (
     GEOMETRY_TYPE_HIDDEN,
     GEOMETRY_TYPE_TWO_SIDED,
     GEOMETRY_TYPE_CAST_SHADOW,

@@ -15,7 +15,7 @@ jobs:
     runs-on: [ ubuntu-latest ]
     strategy:
       matrix:
-        blender-version: [ '2.93', '3.6', '4.0', '4.2' ]
+        blender-version: [ '2.93', '3.6', '4.5', '5.1', '5.2' ]
         include:
           - blender-version: '2.93'
             blender-version-suffix: '13'
@@ -23,15 +23,15 @@ jobs:
           - blender-version: '3.6'
             blender-version-suffix: '0'
             python-version: '3.10.9'
-          - blender-version: '4.0'
-            blender-version-suffix: '0'
-            python-version: '3.10.9'
-          - blender-version: '4.2'
-            blender-version-suffix: '0'
-            python-version: '3.11.7'
-          - blender-version: '4.4'
+          - blender-version: '4.5'
             blender-version-suffix: '3'
             python-version: '3.11.7'
+          - blender-version: '5.1'
+            blender-version-suffix: '0'
+            python-version: '3.12.0'
+          - blender-version: '5.2'
+            blender-version-suffix: '0'
+            python-version: '3.13'
 
     steps:
     - uses: actions/checkout@v3
@@ -47,7 +47,7 @@ jobs:
         python -m pip install --upgrade pip
         python -m pip install codecov
         mkdir tmp && cd tmp
-        wget http://ftp.halifax.rwth-aachen.de/blender/release/Blender${{ matrix.blender-version }}/blender-${{ matrix.blender-version }}.${{ matrix.blender-version-suffix }}-linux-x64.tar.xz
+        wget https://download.blender.org/release/Blender${{ matrix.blender-version }}/blender-${{ matrix.blender-version }}.${{ matrix.blender-version-suffix }}-linux-x64.tar.xz
         tar xf blender-${{ matrix.blender-version }}.${{ matrix.blender-version-suffix }}-linux-x64.tar.xz
         mv blender-${{ matrix.blender-version }}.${{ matrix.blender-version-suffix }}-linux-x64 blender
         rm blender-${{ matrix.blender-version }}.${{ matrix.blender-version-suffix }}-linux-x64.tar.xz

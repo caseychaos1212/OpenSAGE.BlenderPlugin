@@ -2,6 +2,7 @@
 
 import bpy
 from bpy_extras import node_shader_utils
+from .helpers import enable_nodes, set_blend_method, uses_nodes
 
 
 def _ensure_pass(settings, index=None):
@@ -15,10 +16,9 @@ def _ensure_pass(settings, index=None):
 
 def _get_principled(material, readonly):
     try:
-        if not material.use_nodes and readonly:
+        if not uses_nodes(material) and readonly:
             return None
-        if not material.use_nodes:
-            material.use_nodes = True
+        enable_nodes(material)
         return node_shader_utils.PrincipledBSDFWrapper(material, is_readonly=readonly)
     except Exception:
         return None
@@ -43,7 +43,7 @@ def snapshot_material_state(material):
     principled = _get_principled(material, True)
 
     return {
-        'use_nodes': material.use_nodes,
+        'use_nodes': uses_nodes(material),
         'material_type': material.material_type,
         'surface_type': material.surface_type,
         'attributes': set(material.attributes),
@@ -52,7 +52,8 @@ def snapshot_material_state(material):
         'diffuse_color': tuple(material.diffuse_color),
         'translucency': material.translucency,
         'alpha_test': material.alpha_test,
-        'blend_method': material.blend_method,
+        'blend_method': material.blend_method if bpy.app.version < (4, 2, 0) else None,
+        'surface_render_method': material.surface_render_method if bpy.app.version >= (4, 2, 0) else None,
         'blend_mode': material.blend_mode,
         'stage0_mapping': material.stage0_mapping,
         'stage1_mapping': material.stage1_mapping,
@@ -74,7 +75,8 @@ def snapshot_material_state(material):
 def restore_material_state(material, state):
     if not state:
         return
-    material.use_nodes = state['use_nodes']
+    if bpy.app.version < (5, 0, 0):
+        material.use_nodes = state['use_nodes']
     material.material_type = state['material_type']
     material.surface_type = state['surface_type']
     material.attributes = state['attributes']
@@ -83,7 +85,10 @@ def restore_material_state(material, state):
     material.diffuse_color = state['diffuse_color']
     material.translucency = state['translucency']
     material.alpha_test = state['alpha_test']
-    material.blend_method = state['blend_method']
+    if bpy.app.version < (4, 2, 0):
+        material.blend_method = state['blend_method']
+    else:
+        material.surface_render_method = state['surface_render_method']
     material.blend_mode = state['blend_mode']
     material.stage0_mapping = state['stage0_mapping']
     material.stage1_mapping = state['stage1_mapping']
@@ -131,7 +136,7 @@ def apply_pass_to_material(material, settings, pass_settings):
     material.ambient = tuple(pass_settings.ambient)
     material.specular = tuple(pass_settings.specular)
     material.diffuse_color = tuple(pass_settings.diffuse)
-    material.use_nodes = True
+    enable_nodes(material)
     material.blend_mode = int(pass_settings.shader.blend_mode)
     material.stage0_mapping = pass_settings.stage0_mapping
     material.stage1_mapping = pass_settings.stage1_mapping
@@ -147,7 +152,7 @@ def apply_pass_to_material(material, settings, pass_settings):
 
     material.translucency = pass_settings.translucency
     material.alpha_test = pass_settings.opacity < 1.0
-    material.blend_method = 'BLEND' if pass_settings.opacity < 1.0 else 'OPAQUE'
+    set_blend_method(material, 'BLEND' if pass_settings.opacity < 1.0 else 'OPAQUE')
 
     shader_props = getattr(material, 'shader', None)
     if shader_props is not None:

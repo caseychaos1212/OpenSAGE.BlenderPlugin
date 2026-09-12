@@ -3,10 +3,10 @@
 
 import bpy
 from mathutils import Vector, Quaternion
-from io_mesh_w3d.w3d.adaptive_delta import decode
-from io_mesh_w3d.common.structs.animation import *
-from io_mesh_w3d.w3d.structs.compressed_animation import *
-from io_mesh_w3d.common.utils.animation_compat import iter_id_action_fcurves
+from ...w3d.adaptive_delta import decode
+from ...common.structs.animation import *
+from ...w3d.structs.compressed_animation import *
+from ...common.utils.animation_compat import iter_id_action_fcurves
 
 REST_LOC_PROP = '_w3d_rest_location'
 REST_ROT_PROP = '_w3d_rest_rotation'

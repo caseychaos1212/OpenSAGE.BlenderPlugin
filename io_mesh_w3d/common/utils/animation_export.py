@@ -3,10 +3,10 @@
 
 import bpy
 from mathutils import Quaternion
-from io_mesh_w3d.common.utils.helpers import *
-from io_mesh_w3d.common.utils.animation_compat import iter_animation_data_fcurves
-from io_mesh_w3d.common.structs.animation import *
-from io_mesh_w3d.w3d.structs.compressed_animation import *
+from ...common.utils.helpers import *
+from ...common.utils.animation_compat import iter_animation_data_fcurves
+from ...common.structs.animation import *
+from ...w3d.structs.compressed_animation import *
 
 
 def is_translation(channel_type):

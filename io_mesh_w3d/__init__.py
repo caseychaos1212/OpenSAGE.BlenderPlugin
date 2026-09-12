@@ -12,14 +12,15 @@ from bpy.props import (
 from bpy.types import Panel
 from bpy_extras import node_shader_utils
 from bpy_extras.io_utils import ImportHelper, ExportHelper
-from io_mesh_w3d.utils import ReportHelper
-from io_mesh_w3d.export_utils import save_data
-from io_mesh_w3d.import_logging import write_import_log
-from io_mesh_w3d.custom_properties import *
-from io_mesh_w3d.geometry_export import *
-from io_mesh_w3d.bone_volume_export import *
-from io_mesh_w3d.common.utils.material_settings_bridge import apply_pass_to_material
-from io_mesh_w3d.common.utils.object_settings_bridge import get_hlod_role
+from .utils import ReportHelper
+from .export_utils import save_data
+from .import_logging import write_import_log
+from .custom_properties import *
+from .geometry_export import *
+from .bone_volume_export import *
+from .common.utils.material_settings_bridge import apply_pass_to_material
+from .common.utils.object_settings_bridge import get_hlod_role
+from .common.utils.helpers import enable_nodes
 
 W3D_PRESETS = [
     {
@@ -141,7 +142,9 @@ def _object_has_alpha_material(obj):
         mat = slot.material
         if not mat:
             continue
-        if getattr(mat, 'blend_method', 'OPAQUE') != 'OPAQUE':
+        if bpy.app.version < (4, 2, 0) and mat.blend_method != 'OPAQUE':
+            return True
+        if bpy.app.version >= (4, 2, 0) and mat.surface_render_method == 'BLENDED':
             return True
         settings = getattr(mat, 'w3d_material_settings', None)
         if settings and len(settings.passes) > 0:
@@ -205,7 +208,7 @@ def _sync_material_display(material):
 
     apply_pass_to_material(material, settings, pass_settings)
 
-    material.use_nodes = True
+    enable_nodes(material)
     principled = node_shader_utils.PrincipledBSDFWrapper(material, is_readonly=False)
     principled.base_color_texture.image = stage_settings.texture
 

@@ -24,7 +24,7 @@ def _sync_object_type_from_settings(settings, context):
     if obj is None:
         return
     try:
-        from io_mesh_w3d.common.utils.object_settings_bridge import sync_object_type_from_settings
+        from .common.utils.object_settings_bridge import sync_object_type_from_settings
         sync_object_type_from_settings(obj, context=context)
     except Exception:
         # During registration or unit tests Blender data may be unavailable.
@@ -38,7 +38,7 @@ def _sync_scene_objects(scene_settings, context):
     if scene is None:
         return
     try:
-        from io_mesh_w3d.common.utils.object_settings_bridge import sync_scene_object_types
+        from .common.utils.object_settings_bridge import sync_scene_object_types
         sync_scene_object_types(scene, context=context)
     except Exception:
         pass

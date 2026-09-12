@@ -1,9 +1,9 @@
 # <pep8 compliant>
 # Written by Stephan Vedder and Michael Schnabel
 
-from io_mesh_w3d.common.utils.helpers import *
-from io_mesh_w3d.common.structs.collision_box import *
-from io_mesh_w3d.common.utils.object_settings_bridge import is_hlod_attachment, should_export_geometry
+from ...common.utils.helpers import *
+from ...common.structs.collision_box import *
+from ...common.utils.object_settings_bridge import is_hlod_attachment, should_export_geometry
 
 
 def retrieve_boxes(container_name):

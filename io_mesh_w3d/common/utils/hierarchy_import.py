@@ -3,8 +3,8 @@
 
 import bpy
 from mathutils import Vector, Quaternion
-from io_mesh_w3d.common.utils.helpers import *
-from io_mesh_w3d.common.utils.primitives import *
+from ...common.utils.helpers import *
+from ...common.utils.primitives import *
 
 REST_LOC_PROP = '_w3d_rest_location'
 REST_ROT_PROP = '_w3d_rest_rotation'

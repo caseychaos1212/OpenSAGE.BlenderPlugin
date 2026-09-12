@@ -6,6 +6,7 @@ import os
 import sys
 from mathutils import Quaternion, Matrix, Vector
 from bpy_extras.image_utils import load_image
+from .animation_compat import iter_animation_data_fcurves
 
 
 def make_transform_matrix(loc, rot):
@@ -23,6 +24,81 @@ def switch_to_pose(rig, pose):
     if rig is not None:
         rig.data.pose_position = pose
         bpy.context.view_layer.update()
+
+
+def iter_action_fcurves(animation_data):
+    # Keep upstream's entry point while sharing the fork's action-slot handling.
+    yield from iter_animation_data_fcurves(animation_data)
+
+
+# 'Material.blend_method' is deprecated since Blender 4.2 and has no effect in EEVEE Next,
+# which uses 'Material.surface_render_method' instead
+SURFACE_RENDER_METHODS = {
+    'OPAQUE': 'DITHERED',
+    'CLIP': 'DITHERED',
+    'HASHED': 'DITHERED',
+    'BLEND': 'BLENDED'}
+
+
+def set_blend_method(material, blend_method):
+    if bpy.app.version < (4, 2, 0):
+        material.blend_method = blend_method
+        return
+    material.surface_render_method = SURFACE_RENDER_METHODS[blend_method]
+
+
+def uses_nodes(material):
+    if bpy.app.version >= (5, 0, 0):
+        return material.node_tree is not None
+    return material.use_nodes
+
+
+def enable_nodes(material):
+    # 'Material.use_nodes' is deprecated and gets removed in Blender 6.0,
+    # since Blender 5.0 materials always come with a node tree
+    if not uses_nodes(material):
+        material.use_nodes = True
+
+
+def set_transparency_overlap(material, value):
+    # 'Material.show_transparent_back' is deprecated since Blender 4.2
+    if bpy.app.version < (4, 2, 0):
+        material.show_transparent_back = value
+        return
+    material.use_transparency_overlap = value
+
+
+def new_vertex_color_layer(mesh, name):
+    # 'Mesh.vertex_colors' is deprecated since Blender 3.2 in favour of color attributes
+    if bpy.app.version < (3, 2, 0):
+        return mesh.vertex_colors.new(name=name)
+    return mesh.color_attributes.new(name=name, type='BYTE_COLOR', domain='CORNER')
+
+
+def get_vertex_color_layers(mesh):
+    if bpy.app.version < (3, 2, 0):
+        return list(mesh.vertex_colors)
+    return [attribute for attribute in mesh.color_attributes if attribute.domain == 'CORNER']
+
+
+def set_uv(uv_layer, index, value):
+    # 'MeshUVLoopLayer.data' is deprecated since Blender 3.5 in favour of the 'uv' attribute
+    if bpy.app.version < (3, 5, 0):
+        uv_layer.data[index].uv = value
+        return
+    uv_layer.uv[index].vector = value
+
+
+def get_uv(uv_layer, index):
+    if bpy.app.version < (3, 5, 0):
+        return uv_layer.data[index].uv
+    return uv_layer.uv[index].vector
+
+
+def get_uv_count(uv_layer):
+    if bpy.app.version < (3, 5, 0):
+        return len(uv_layer.data)
+    return len(uv_layer.uv)
 
 
 def insensitive_path(path):
@@ -89,7 +165,7 @@ def create_uvlayer(context, mesh, b_mesh, tris, mat_pass):
     for i, face in enumerate(b_mesh.faces):
         for loop in face.loops:
             idx = tris[i][loop.index % 3]
-            uv_layer.data[loop.index].uv = tx_coords[idx].xy
+            set_uv(uv_layer, loop.index, tx_coords[idx].xy)
 
 
 def create_uvlayer_2(context, mesh, b_mesh, tris, mat_pass):
@@ -104,7 +180,7 @@ def create_uvlayer_2(context, mesh, b_mesh, tris, mat_pass):
     for i, face in enumerate(b_mesh.faces):
         for loop in face.loops:
             idx = tris[i][loop.index % 3]
-            uv_layer.data[loop.index].uv = tx_coords_2[idx].xy
+            set_uv(uv_layer, loop.index, tx_coords_2[idx].xy)
 
 
 extensions = ['.dds', '.tga', '.jpg', '.jpeg', '.png', '.bmp']

@@ -11,6 +11,7 @@ from io_mesh_w3d.import_utils import create_data
 from tests.common.helpers.hierarchy import *
 from tests.common.helpers.hlod import *
 from tests.common.helpers.mesh import *
+from io_mesh_w3d.common.utils.helpers import *
 from tests.utils import *
 
 
@@ -54,7 +55,7 @@ class TestImportUtils(TestCase):
         bone.hide = True
         bone.keyframe_insert(data_path='hide', frame=0)
 
-        results = [fcu for fcu in armature.animation_data.action.fcurves if 'hide' in fcu.data_path]
+        results = [fcu for fcu in iter_action_fcurves(armature.animation_data) if 'hide' in fcu.data_path]
         self.assertEqual(1, len(results))
 
     def test_create_data_returns_import_summary(self):

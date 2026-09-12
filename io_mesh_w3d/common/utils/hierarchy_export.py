@@ -2,9 +2,9 @@
 # Written by Stephan Vedder and Michael Schnabel
 
 from mathutils import Vector
-from io_mesh_w3d.common.utils.helpers import *
-from io_mesh_w3d.common.structs.hierarchy import *
-from io_mesh_w3d.common.utils.object_settings_bridge import should_export_transform
+from ...common.utils.helpers import *
+from ...common.structs.hierarchy import *
+from ...common.utils.object_settings_bridge import should_export_transform
 
 
 pick_plane_names = ['PICK']

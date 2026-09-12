@@ -1,0 +1,30 @@
+schema_version = "1.0.0"
+
+id = "io_mesh_w3d"
+version = "0.8.1"
+name = "OpenW3D Import/Export (.w3d/.w3x)"
+tagline = "Import and export Westwood W3D and W3X models"
+maintainer = "OpenW3D Team"
+type = "add-on"
+
+website = "https://github.com/caseychaos1212/OpenSAGE.BlenderPlugin"
+
+tags = ["Import-Export"]
+
+# The extension system was introduced in Blender 4.2, older versions install
+# this add-on through the legacy 'bl_info' path instead.
+blender_version_min = "4.2.0"
+
+license = [
+  "SPDX:LGPL-3.0-or-later",
+]
+
+[permissions]
+files = "Import and export W3D/W3X models, animations and textures"
+
+[build]
+paths_exclude_pattern = [
+  "__pycache__/",
+  "/.git/",
+  "/*.zip",
+]

@@ -6,7 +6,7 @@ import re
 
 import bpy
 
-from io_mesh_w3d.common.utils.animation_compat import iter_action_fcurves, iter_animation_data_fcurves
+from .common.utils.animation_compat import iter_action_fcurves, iter_animation_data_fcurves
 
 POSE_BONE_PATTERN = re.compile(r'pose\.bones\["([^"]+)"\]')
 

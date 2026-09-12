@@ -9,24 +9,24 @@ import math
 from mathutils import Vector, Matrix
 from bpy_extras import node_shader_utils
 
-from io_mesh_w3d.common.structs.mesh import *
-from io_mesh_w3d.common.structs.mesh_structs.aabbtree import (
+from ...common.structs.mesh import *
+from ...common.structs.mesh_structs.aabbtree import (
     AABBTree,
     AABBTreeHeader,
     AABBTreeNode,
     Children,
     Polys,
 )
-from io_mesh_w3d.common.structs.mesh_structs.texture import Texture, TextureInfo
-from io_mesh_w3d.w3d.structs.mesh_structs.material_pass import TextureStage
-from io_mesh_w3d.common.utils.helpers import *
-from io_mesh_w3d.common.utils.material_export import *
-from io_mesh_w3d.common.utils.object_settings_bridge import (
+from ...common.structs.mesh_structs.texture import Texture, TextureInfo
+from ...w3d.structs.mesh_structs.material_pass import TextureStage
+from ...common.utils.helpers import *
+from ...common.utils.material_export import *
+from ...common.utils.object_settings_bridge import (
     should_export_geometry,
     apply_object_settings_to_header,
     is_hlod_attachment,
 )
-from io_mesh_w3d.common.utils.material_settings_bridge import (
+from ...common.utils.material_settings_bridge import (
     apply_material_settings_to_legacy,
     snapshot_material_state,
     restore_material_state,
@@ -287,7 +287,7 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
                 for j, face in enumerate(b_mesh.faces):
                     for loop in face.loops:
                         vert_index = mesh_struct.triangles[j].vert_ids[loop.index % 3]
-                        stage.tx_coords[0][vert_index] = uv_layer.data[loop.index].uv.copy()
+                        stage.tx_coords[0][vert_index] = get_uv(uv_layer, loop.index).copy()
                 tx_stages.append(stage)
 
             b_mesh.free()
@@ -383,7 +383,7 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
             if build_aabbtree:
                 mesh_struct.aabbtree = build_aabb_tree(mesh_struct)
 
-            for layer in mesh.vertex_colors:
+            for layer in get_vertex_color_layers(mesh):
                 if '_' in layer.name:
                     index = int(layer.name.split('_')[-1])
                 else:
@@ -666,13 +666,13 @@ def split_multi_uv_vertices(context, mesh, b_mesh):
         ver.select_set(False)
 
     for i, uv_layer in enumerate(mesh.uv_layers):
-        tx_coords = [None] * len(uv_layer.data)
+        tx_coords = [None] * get_uv_count(uv_layer)
         for j, face in enumerate(b_mesh.faces):
             for loop in face.loops:
                 vert_index = mesh.polygons[j].vertices[loop.index % 3]
                 if tx_coords[vert_index] is None:
-                    tx_coords[vert_index] = uv_layer.data[loop.index].uv
-                elif tx_coords[vert_index] != uv_layer.data[loop.index].uv:
+                    tx_coords[vert_index] = get_uv(uv_layer, loop.index).copy()
+                elif tx_coords[vert_index] != get_uv(uv_layer, loop.index):
                     b_mesh.verts[vert_index].select_set(True)
                     vert_index2 = mesh.polygons[j].vertices[(loop.index + 1) % 3]
                     b_mesh.verts[vert_index2].select_set(True)
