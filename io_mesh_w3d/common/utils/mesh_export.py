@@ -75,16 +75,10 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
                 continue
             seen_mesh_data.add(data_id)
 
-        if smooth_normals:
-            mesh_data = source_object.data
-            if mesh_data and hasattr(mesh_data, 'polygons'):
-                try:
-                    mesh_data.use_auto_smooth = True
-                    mesh_data.auto_smooth_angle = math.radians(180.0)
-                    for poly in mesh_data.polygons:
-                        poly.use_smooth = True
-                except AttributeError:
-                    pass
+        object_settings = getattr(mesh_object, 'w3d_object_settings', None)
+        keep_normals = bool(object_settings and object_settings.geom_keep_normals)
+        z_normal = bool(object_settings and object_settings.geom_z_normal)
+        vertex_alpha = bool(object_settings and object_settings.geom_vertex_alpha)
 
         if mesh_object.mode != 'OBJECT':
             bpy.ops.object.mode_set(mode='OBJECT')
@@ -96,8 +90,6 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
 
         header = mesh_struct.header
         meta = apply_object_settings_to_header(mesh_object, header)
-        if header.sort_level == 0:
-            header.sort_level = mesh_object.data.sort_level
         mesh_struct.user_text = mesh_object.data.userText
 
         temp_mesh = None
@@ -115,10 +107,21 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
 
         mesh = temp_mesh
         try:
-            b_mesh = prepare_bmesh(context, mesh)
+            # All preparation uses the temporary evaluated mesh, never the
+            # artist's mesh data (which may also be shared by other objects).
+            if smooth_normals and not keep_normals:
+                for polygon in mesh.polygons:
+                    polygon.use_smooth = True
+                if bpy.app.version < (4, 1, 0):
+                    mesh.use_auto_smooth = True
+                    mesh.auto_smooth_angle = math.radians(180.0)
+            alpha_layer = active_color_layer(mesh) if vertex_alpha else None
+            alpha_layer_name = alpha_layer.name if alpha_layer is not None else None
+            b_mesh = prepare_bmesh(context, mesh, keep_normals, alpha_layer)
 
             if len(mesh.vertices) == 0:
                 context.warning(f'mesh \'{mesh.name}\' does not have a single vertex!')
+                b_mesh.free()
                 continue
 
             center, radius = calculate_mesh_sphere(mesh)
@@ -135,6 +138,8 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
                 loop_dict[loop.vertex_index] = loop
 
             _, _, scale = mesh_object.matrix_local.decompose()
+            normal_scale = Matrix.Diagonal(scale).inverted_safe().transposed()
+            saved_normals = mesh.attributes.get(EXPORT_NORMAL_ATTRIBUTE) if keep_normals else None
 
             is_skinned = False
             for vertex in mesh.vertices:
@@ -207,9 +212,11 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
 
                 if i in loop_dict:
                     loop = loop_dict[i]
-                    # do NOT use loop.normal here! that might result in weird shading issues
-                    mesh_struct.normals.append(rotation @ vertex.normal)
-                    mesh_struct.normals_2.append(rotation_2 @ vertex.normal)
+                    normal = vertex.normal
+                    if saved_normals is not None:
+                        normal = (normal_scale @ saved_normals.data[loop.index].vector).normalized()
+                    mesh_struct.normals.append(Vector((0, 0, 1)) if z_normal else rotation @ normal)
+                    mesh_struct.normals_2.append(Vector((0, 0, 1)) if z_normal else rotation_2 @ normal)
 
                     if mesh.uv_layers:
                         # in order to adapt to 3ds max orientation
@@ -217,8 +224,8 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
                         mesh_struct.bitangents.append((rotation @ loop.tangent))
                 else:
                     context.warning(f'mesh \'{mesh_object.name}\' vertex {i} is not connected to any face!')
-                    mesh_struct.normals.append(rotation @ vertex.normal)
-                    mesh_struct.normals_2.append(rotation_2 @ vertex.normal)
+                    mesh_struct.normals.append(Vector((0, 0, 1)) if z_normal else rotation @ vertex.normal)
+                    mesh_struct.normals_2.append(Vector((0, 0, 1)) if z_normal else rotation_2 @ vertex.normal)
 
                     if mesh.uv_layers:
                         # only dummys
@@ -305,7 +312,8 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
                 # Renegade vertex-material passes do not describe shader materials.
                 shader_material = context.file_format == 'W3X' or (
                     material.material_type == 'SHADER_MATERIAL' and not force_vertex_materials)
-                settings = None if shader_material else getattr(material, 'w3d_material_settings', None)
+                settings = (None if shader_material and material.material_type == 'SHADER_MATERIAL'
+                            else getattr(material, 'w3d_material_settings', None))
                 pass_configs = list(settings.passes) if settings and settings.passes else [None]
                 original_state = snapshot_material_state(material) if settings and settings.passes else None
 
@@ -327,17 +335,24 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
 
                         if shader_material:
                             mat_pass.shader_material_ids = [len(mesh_struct.shader_materials)]
-                            if pass_config is None and i < len(tx_stages):
+                            if pass_config is not None:
+                                coords = copy_uv_coords(tx_stages, pass_config.uv_channel_stage0)
+                                mat_pass.tx_coords = coords[0] if coords else []
+                                if pass_config.stage1.enabled:
+                                    coords = copy_uv_coords(tx_stages, pass_config.uv_channel_stage1)
+                                    mat_pass.tx_coords_2 = coords[0] if coords else []
+                            elif i < len(tx_stages):
                                 mat_pass.tx_coords = tx_stages[i].tx_coords[0]
                                 if len(mesh.materials) == 1 and len(tx_stages) == 2:
                                     mat_pass.tx_coords_2 = tx_stages[i + 1].tx_coords[0]
 
                             mesh_struct.shader_materials.append(
                                 retrieve_shader_material(context, material, principled,
-                                                         w3x=context.file_format == 'W3X'))
+                                                         w3x=context.file_format == 'W3X',
+                                                         pass_settings=pass_config))
 
                         else:
-                            shader = retrieve_shader(material)
+                            shader = retrieve_shader(material, pass_config)
                             mesh_struct.shaders.append(shader)
                             mat_pass.shader_ids = [len(mesh_struct.shaders) - 1]
                             mat_pass.vertex_material_ids = [len(mesh_struct.vert_materials)]
@@ -367,7 +382,7 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
                                             tx_ids=[[len(mesh_struct.textures) - 1]],
                                             tx_coords=tx_stages[i].tx_coords))
 
-                        if pass_config is not None:
+                        if pass_config is not None and not shader_material:
                             custom_stage |= add_stage_from_settings(
                                 pass_config.stage0,
                                 pass_config.uv_channel_stage0,
@@ -394,6 +409,9 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
                 mesh_struct.aabbtree = build_aabb_tree(mesh_struct)
 
             for layer in get_vertex_color_layers(mesh):
+                if vertex_alpha and layer.name == alpha_layer_name:
+                    # This attribute supplies alpha instead of diffuse RGB.
+                    continue
                 if '_' in layer.name and layer.name.rsplit('_', 1)[-1].isdigit():
                     index = int(layer.name.rsplit('_', 1)[-1])
                 else:
@@ -419,6 +437,15 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
                     target[loop.vertex_index] = RGBA(
                         r=round(color[0] * 255), g=round(color[1] * 255),
                         b=round(color[2] * 255), a=round(color[3] * 255))
+
+            if vertex_alpha:
+                apply_vertex_alpha(context, mesh, mesh_struct, mesh_object.name)
+
+            if context.file_format == 'W3X' and object_settings and any((
+                    object_settings.geom_shatter, object_settings.geom_prelit,
+                    object_settings.geom_always_dyn_light)):
+                context.warning(f"mesh '{mesh_object.name}': Shatter, Prelit and Always Dynamic Light "
+                                'are W3D-only flags and cannot be stored in W3X')
 
             header.vert_channel_flags = VERTEX_CHANNEL_LOCATION | VERTEX_CHANNEL_NORMAL
 
@@ -452,9 +479,23 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
                     context.info('EITHER apply an armature modifier to it, create a vertex group with the same name as the mesh and do the weight painting OR set the armature as parent object and the identically named bone as parent bone.')
                     continue
 
-            if mesh_struct.shader_materials:
+            # Max's Tangents geometry flag puts the basis in the first material
+            # pass. Shader materials also need it directly on the mesh.
+            pass_tangents = context.file_format == 'W3D' and bool(header.attrs & GEOMETRY_TYPE_NPATCHABLE)
+            has_tangents = bool(mesh_struct.tangents and mesh_struct.bitangents)
+            if pass_tangents:
+                if has_tangents and mesh_struct.material_passes:
+                    mesh_struct.material_passes[0].tangents = mesh_struct.tangents
+                    mesh_struct.material_passes[0].bitangents = mesh_struct.bitangents
+                else:
+                    context.warning(
+                        f"mesh '{mesh_object.name}' cannot export Tangents without UV coordinates and a material pass")
+                    pass_tangents = False
+            if not pass_tangents:
+                header.attrs &= ~GEOMETRY_TYPE_NPATCHABLE
+            if has_tangents and (mesh_struct.shader_materials or pass_tangents):
                 header.vert_channel_flags |= VERTEX_CHANNEL_TANGENT | VERTEX_CHANNEL_BITANGENT
-            else:
+            if not mesh_struct.shader_materials:
                 mesh_struct.tangents = []
                 mesh_struct.bitangents = []
 
@@ -488,19 +529,118 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
 ##########################################################################
 
 
-def prepare_bmesh(context, mesh):
+EXPORT_NORMAL_ATTRIBUTE = '_w3d_export_normal'
+EXPORT_ALPHA_ATTRIBUTE = '_w3d_export_alpha'
+# Blender encodes custom normals with limited precision in each corner's frame.
+NORMAL_SEAM_EPSILON_SQUARED = (5e-4) ** 2
+
+
+def active_color_layer(mesh):
+    if bpy.app.version < (3, 2, 0):
+        return mesh.vertex_colors.active
+    return mesh.color_attributes.active_color
+
+
+def prepare_bmesh(context, mesh, keep_normals=False, alpha_layer=None):
+    if keep_normals and hasattr(mesh, 'calc_normals_split'):
+        mesh.calc_normals_split()
     b_mesh = bmesh.new()
     b_mesh.from_mesh(mesh)
-    bmesh.ops.triangulate(b_mesh, faces=b_mesh.faces)
+    # Temporary corner attributes survive triangulation and edge splitting,
+    # unlike recomputed vertex normals or a last-corner-wins color lookup.
+    normals = b_mesh.loops.layers.float_vector.get(EXPORT_NORMAL_ATTRIBUTE)
+    if normals is not None:
+        b_mesh.loops.layers.float_vector.remove(normals)
+    alphas = b_mesh.loops.layers.float.get(EXPORT_ALPHA_ATTRIBUTE)
+    if alphas is not None:
+        b_mesh.loops.layers.float.remove(alphas)
+    normals = b_mesh.loops.layers.float_vector.new(EXPORT_NORMAL_ATTRIBUTE) if keep_normals else None
+    alphas = b_mesh.loops.layers.float.new(EXPORT_ALPHA_ATTRIBUTE) if alpha_layer is not None else None
+    for face, polygon in zip(b_mesh.faces, mesh.polygons):
+        for loop, loop_index in zip(face.loops, polygon.loop_indices):
+            if normals is not None:
+                loop[normals] = mesh.loops[loop_index].normal
+            if alphas is not None:
+                index = (loop.vert.index if getattr(alpha_layer, 'domain', 'CORNER') == 'POINT'
+                         else loop_index)
+                color = alpha_layer.data[index].color
+                loop[alphas] = max(0.0, min(1.0, sum(color[:3]) / 3.0))
+    bmesh.ops.triangulate(b_mesh, faces=list(b_mesh.faces))
     b_mesh.to_mesh(mesh)
+    b_mesh.free()
     mesh.update()
 
     b_mesh = bmesh.new()
     b_mesh.from_mesh(mesh)
-    b_mesh = split_multi_uv_vertices(context, mesh, b_mesh)
+    split_multi_uv_vertices(context, mesh, b_mesh)
+    split_export_attribute_vertices(b_mesh, keep_normals, alpha_layer is not None)
     b_mesh.to_mesh(mesh)
     mesh.update()
+    if keep_normals:
+        mesh.normals_split_custom_set([datum.vector for datum in mesh.attributes[EXPORT_NORMAL_ATTRIBUTE].data])
+    else:
+        custom_normals = mesh.attributes.get('custom_normal')
+        if custom_normals is not None:
+            mesh.attributes.remove(custom_normals)
+        elif mesh.has_custom_normals:
+            mesh.normals_split_custom_set([(0, 0, 0)] * len(mesh.loops))
+    mesh.update()
     return b_mesh
+
+
+def split_export_attribute_vertices(b_mesh, keep_normals, vertex_alpha):
+    normal_layer = b_mesh.loops.layers.float_vector.get(EXPORT_NORMAL_ATTRIBUTE) if keep_normals else None
+    alpha_layer = b_mesh.loops.layers.float.get(EXPORT_ALPHA_ATTRIBUTE) if vertex_alpha else None
+    if normal_layer is None and alpha_layer is None:
+        return
+    edges = set()
+    for vertex in b_mesh.verts:
+        loops = list(vertex.link_loops)
+        if not loops:
+            continue
+        first = loops[0]
+        different = any(
+            (normal_layer is not None and (loop[normal_layer] - first[normal_layer]).length_squared > NORMAL_SEAM_EPSILON_SQUARED)
+            or (alpha_layer is not None and abs(loop[alpha_layer] - first[alpha_layer]) > 1e-6)
+            for loop in loops[1:])
+        if different:
+            edges.update(vertex.link_edges)
+    if edges:
+        bmesh.ops.split_edges(b_mesh, edges=list(edges))
+
+
+def pass_uses_alpha(mesh_struct, mat_pass):
+    for shader_id in mat_pass.shader_ids:
+        if 0 <= shader_id < len(mesh_struct.shaders):
+            shader = mesh_struct.shaders[shader_id]
+            if shader.src_blend in (2, 3) or shader.dest_blend in (4, 5) or shader.alpha_test:
+                return True
+    for shader_id in mat_pass.shader_material_ids:
+        if 0 <= shader_id < len(mesh_struct.shader_materials):
+            properties = {prop.name: prop.value for prop in mesh_struct.shader_materials[shader_id].properties}
+            if properties.get('AlphaTestEnable', False) or properties.get('BlendMode', 0) in (5, 6, 7):
+                return True
+    return False
+
+
+def apply_vertex_alpha(context, mesh, mesh_struct, name):
+    alpha_attribute = mesh.attributes.get(EXPORT_ALPHA_ATTRIBUTE)
+    if alpha_attribute is None:
+        context.warning(f"mesh '{name}': Vertex Alpha needs an active color attribute")
+        return
+    alpha_passes = [mat_pass for mat_pass in mesh_struct.material_passes if pass_uses_alpha(mesh_struct, mat_pass)]
+    if not alpha_passes:
+        context.warning(f"mesh '{name}': Vertex Alpha needs an alpha-blended or alpha-tested material pass")
+        return
+    values = [255] * len(mesh.vertices)
+    for loop in mesh.loops:
+        # Max converts alpha to an unsigned byte by truncating.
+        values[loop.vertex_index] = int(alpha_attribute.data[loop.index].value * 255)
+    for mat_pass in alpha_passes:
+        if not mat_pass.dcg:
+            mat_pass.dcg = [RGBA(r=255, g=255, b=255, a=255) for _ in mesh.vertices]
+        for color, alpha in zip(mat_pass.dcg, values):
+            color.a = alpha
 
 
 def resolve_triangle_surface_type(material):
@@ -632,13 +772,17 @@ def ensure_texture_slot(stage_settings, mesh_struct, cache):
     frame_count = int(stage_settings.frames) if stage_settings.frames is not None else 0
     frame_rate = float(stage_settings.fps) if stage_settings.fps is not None else 0.0
     anim_mode = stage_settings.animation_mode or 'LOOP'
-    key = (image.name, frame_count, frame_rate, anim_mode)
+    attributes = (int(stage_settings.publish) | (int(stage_settings.no_lod) << 2)
+                  | (int(stage_settings.clamp_u) << 3) | (int(stage_settings.clamp_v) << 4))
+    # Keep distinct imported texture-table entries, while sharing repeated IDs.
+    key = (image.name, frame_count, frame_rate, anim_mode, attributes,
+           stage_settings.get('_w3d_texture_id'))
     if key in cache:
         return cache[key]
 
     filepath = os.path.basename(image.filepath) if image.filepath else image.name
     info = TextureInfo(
-        attributes=0,
+        attributes=attributes,
         animation_type=ANIM_MODE_TO_INT.get(anim_mode, 0),
         frame_count=frame_count,
         frame_rate=frame_rate)

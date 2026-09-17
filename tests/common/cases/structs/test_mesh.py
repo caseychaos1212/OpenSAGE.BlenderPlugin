@@ -7,11 +7,6 @@ from tests.utils import TestCase
 from unittest.mock import patch, call
 
 
-def clear_tangents(mesh):
-    mesh.tangents = []
-    mesh.bitangents = []
-
-
 class TestMesh(TestCase):
     def test_write_read(self):
         expected = get_mesh()
@@ -27,7 +22,7 @@ class TestMesh(TestCase):
         self.assertEqual(4345, expected.size(False))
         self.assertEqual(4353, expected.size())
 
-        self.write_read_test(expected, W3D_CHUNK_MESH, Mesh.read, compare_meshes, self, True, clear_tangents)
+        self.write_read_test(expected, W3D_CHUNK_MESH, Mesh.read, compare_meshes, self, True)
 
     def test_write_read_prelit(self):
         expected = get_mesh(prelit=True)
@@ -104,15 +99,11 @@ class TestMesh(TestCase):
 
     def test_unsupported_chunk_skip(self):
         output = io.BytesIO()
-        write_chunk_head(W3D_CHUNK_MESH, output, 54, has_sub_chunks=True)
+        write_chunk_head(W3D_CHUNK_MESH, output, 36, has_sub_chunks=True)
 
         write_chunk_head(W3D_CHUNK_VERTICES_2, output, 1, has_sub_chunks=False)
         write_ubyte(0x00, output)
         write_chunk_head(W3D_CHUNK_NORMALS_2, output, 1, has_sub_chunks=False)
-        write_ubyte(0x00, output)
-        write_chunk_head(W3D_CHUNK_TANGENTS, output, 1, has_sub_chunks=False)
-        write_ubyte(0x00, output)
-        write_chunk_head(W3D_CHUNK_BITANGENTS, output, 1, has_sub_chunks=False)
         write_ubyte(0x00, output)
         write_chunk_head(W3D_CHUNK_DEFORM, output, 1, has_sub_chunks=False)
         write_ubyte(0x00, output)
@@ -130,8 +121,6 @@ class TestMesh(TestCase):
             Mesh.read(self, io_stream, subchunk_end)
             report_func.assert_has_calls([call('-> vertices 2 chunk is not supported'),
                                           call('-> normals 2 chunk is not supported'),
-                                          call('-> tangents are computed in blender'),
-                                          call('-> bitangents are computed in blender'),
                                           call('-> deform chunk is not supported'),
                                           call('-> ps2 shaders chunk is not supported')])
 

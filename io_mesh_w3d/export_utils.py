@@ -100,7 +100,8 @@ def retrieve_data(context, export_settings):
             has_hlod_attachments = bool(
                 data_context.hlod and (
                     data_context.hlod.aggregate_array is not None
-                    or data_context.hlod.proxy_array is not None))
+                    or data_context.hlod.proxy_array is not None
+                    or data_context.hlod.light_array is not None))
             if not (data_context.meshes or data_context.collision_boxes or data_context.dazzles or has_hlod_attachments):
                 context.error('Scene does not contain any meshes, aborting export!')
                 return None

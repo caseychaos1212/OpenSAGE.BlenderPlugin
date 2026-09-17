@@ -9,7 +9,7 @@ from bpy.props import (
     IntProperty,
     StringProperty,
 )
-from bpy.types import Panel
+from bpy.types import AddonPreferences, Panel
 from bpy_extras import node_shader_utils
 from bpy_extras.io_utils import ImportHelper, ExportHelper
 from .utils import ReportHelper
@@ -20,6 +20,7 @@ from .geometry_export import *
 from .bone_volume_export import *
 from .common.utils.material_settings_bridge import apply_pass_to_material
 from .common.utils.object_settings_bridge import get_hlod_role
+from .common.utils.bone_display import game_bone_description
 from .common.utils.helpers import enable_nodes
 
 W3D_PRESETS = [
@@ -248,9 +249,10 @@ def copy_object_settings(source_obj, target_obj):
         return False
     for prop in src_settings.bl_rna.properties:
         identifier = prop.identifier
-        if identifier in {'rna_type'}:
+        if identifier in {'rna_type', 'export_type'}:
             continue
         setattr(dst_settings, identifier, getattr(src_settings, identifier))
+    dst_settings.export_type = src_settings.export_type
     return True
 
 
@@ -1101,97 +1103,33 @@ def menu_func_import(self, _context):
     self.layout.operator(ImportW3D.bl_idname, text='Westwood W3D (.w3d/.w3x)')
 
 
+class W3D_OT_open_object_settings(bpy.types.Operator):
+    bl_idname = 'w3d.open_object_settings'
+    bl_label = 'Open W3D Object Settings'
+    bl_description = 'Open the Object Properties tab containing the W3D export controls'
+
+    @classmethod
+    def poll(cls, context):
+        return context.area is not None and context.area.type == 'PROPERTIES'
+
+    def execute(self, context):
+        context.space_data.context = 'OBJECT'
+        return {'FINISHED'}
+
+
 class MESH_PROPERTIES_PANEL_PT_w3d(Panel):
-    bl_label = 'W3D Properties'
+    bl_label = 'W3D Settings'
     bl_space_type = 'PROPERTIES'
     bl_region_type = 'WINDOW'
     bl_context = 'data'
 
+    @classmethod
+    def poll(cls, context):
+        return context.active_object is not None and context.active_object.type == 'MESH'
+
     def draw(self, context):
-        obj = context.active_object
-        if not obj or obj.type != 'MESH':
-            return
-
-        layout = self.layout
-        layout.use_property_split = True
-        mesh = obj.data
-        settings = getattr(obj, 'w3d_object_settings', None)
-        hlod_role = get_hlod_role(obj)
-
-        type_box = layout.box()
-        type_box.label(text='Object Classification')
-        type_box.prop(mesh, 'object_type')
-        if mesh.object_type == 'MESH':
-            type_box.prop(mesh, 'sort_level')
-            type_box.prop(mesh, 'casts_shadow')
-            type_box.prop(mesh, 'two_sided')
-            type_box.prop(mesh, 'userText')
-        elif mesh.object_type == 'DAZZLE':
-            type_box.prop(mesh, 'dazzle_type')
-        elif mesh.object_type == 'BOX':
-            type_box.prop(mesh, 'box_type')
-            type_box.prop(mesh, 'box_collision_types')
-        elif mesh.object_type == 'GEOMETRY':
-            type_box.prop(mesh, 'geometry_type')
-            type_box.prop(mesh, 'contact_points_type')
-        elif mesh.object_type == 'BONE_VOLUME':
-            type_box.prop(mesh, 'mass')
-            type_box.prop(mesh, 'spinniness')
-            type_box.prop(mesh, 'contact_tag')
-
-        if settings is None:
-            layout.label(text='W3D object settings are unavailable on this object', icon='ERROR')
-            return
-
-        export_box = layout.box()
-        export_box.label(text='Export Options')
-        export_box.prop(settings, 'export_object')
-        export_box.prop(settings, 'export_transform')
-        export_box.prop(settings, 'export_geometry')
-        export_box.prop(settings, 'geometry_type')
-        if hlod_role != 'LOD':
-            export_box.label(text='This mesh exports as an HLOD attachment only.', icon='INFO')
-            export_box.prop(settings, 'hlod_identifier')
-        export_box.prop(settings, 'static_sort_level')
-        export_box.prop(settings, 'screen_size')
-        if settings.geometry_type == 'DAZZLE':
-            export_box.prop(settings, 'dazzle_name')
-
-        geom_flags = layout.box()
-        geom_flags.label(text='Geometry Flags')
-        flags = [
-            'geom_hide',
-            'geom_two_sided',
-            'geom_shadow',
-            'geom_vertex_alpha',
-            'geom_z_normal',
-            'geom_shatter',
-            'geom_tangents',
-            'geom_keep_normals',
-            'geom_prelit',
-            'geom_always_dyn_light',
-        ]
-        grid = geom_flags.grid_flow(row_major=True, columns=2, even_columns=True)
-        for flag in flags:
-            grid.prop(settings, flag)
-
-        collision_box = layout.box()
-        collision_box.label(text='Collision Flags')
-        collision_row = collision_box.row(align=True)
-        collision_row.prop(settings, 'coll_physical', toggle=True)
-        collision_row.prop(settings, 'coll_projectile', toggle=True)
-        collision_row.prop(settings, 'coll_vis', toggle=True)
-        collision_row = collision_box.row(align=True)
-        collision_row.prop(settings, 'coll_camera', toggle=True)
-        collision_row.prop(settings, 'coll_vehicle', toggle=True)
-
-        warning_icon = 'ERROR'
-        if settings.geometry_type == 'DAZZLE' and settings.geom_vertex_alpha:
-            layout.label(text='Vertex Alpha is ignored on Dazzle geometry.', icon=warning_icon)
-        if mesh.object_type != 'DAZZLE' and settings.geometry_type == 'DAZZLE':
-            layout.label(text='Set the mesh Object Type to DAZZLE for Dazzle geometry.', icon=warning_icon)
-        if settings.geometry_type == 'BOX' and mesh.object_type != 'BOX':
-            layout.label(text='Geometry Type is BOX but the mesh Object Type is not BOX.', icon=warning_icon)
+        self.layout.label(text='W3D controls are in Object Properties.', icon='INFO')
+        self.layout.operator('w3d.open_object_settings', icon='OBJECT_DATA')
 
 
 class OBJECT_PROPERTIES_PANEL_PT_w3d(Panel):
@@ -1202,32 +1140,83 @@ class OBJECT_PROPERTIES_PANEL_PT_w3d(Panel):
 
     def draw(self, context):
         obj = context.active_object
-        if obj is None:
-            return
-
         settings = getattr(obj, 'w3d_object_settings', None)
         if settings is None:
             return
-
         layout = self.layout
         layout.use_property_split = True
         layout.prop(settings, 'export_object')
-        layout.prop(settings, 'hlod_role')
-        layout.prop(settings, 'export_transform')
-        layout.prop(settings, 'export_geometry')
+        if obj.type == 'ARMATURE':
+            layout.prop(settings, 'show_game_bone_directions')
+            if settings.show_game_bone_directions:
+                layout.label(text='Arrows show game axes in Object and Pose Mode.')
+            return
 
-        if settings.hlod_role != 'LOD':
-            layout.prop(settings, 'hlod_identifier')
-            info = layout.box()
-            info.label(text='Aggregate and Proxy objects export only as HLOD attachments.', icon='INFO')
-            if settings.hlod_role == 'PROXY':
-                info.label(text='Blank identifier uses the object name before "~".')
-        elif obj.type == 'EMPTY':
-            info = layout.box()
-            info.label(text='Empty objects only export through Aggregate or Proxy roles.', icon='INFO')
+        content = layout.column()
+        content.enabled = settings.export_object
+        content.prop(settings, 'hlod_role')
+        if obj.type == 'MESH':
+            content.prop(settings, 'export_transform')
+        role = get_hlod_role(obj)
+        if role != 'LOD':
+            content.prop(settings, 'hlod_identifier')
+            content.label(text='Exports an HLOD reference without mesh geometry.', icon='INFO')
+            if role == 'PROXY':
+                content.label(text='Blank identifier uses the name before "~".')
+            return
+        if obj.type != 'MESH':
+            content.label(text='Choose an attachment role to export this object.', icon='INFO')
+            return
 
-        if settings.hlod_role == 'LOD' and settings.geometry_type == 'AGGREGATE':
-            layout.label(text='Legacy aggregate export is active via Geometry Type.', icon='INFO')
+        mesh = obj.data
+        content.prop(settings, 'export_type')
+        if mesh.users > 1:
+            content.label(text='Mesh classification is shared by linked objects.', icon='LINKED')
+        if mesh.object_type in ('GEOMETRY', 'BONE_VOLUME'):
+            if mesh.object_type == 'GEOMETRY':
+                content.prop(mesh, 'geometry_type')
+                content.prop(mesh, 'contact_points_type')
+                content.label(text='Used by Export Geometry Data.')
+            else:
+                content.prop(mesh, 'mass')
+                content.prop(mesh, 'spinniness')
+                content.prop(mesh, 'contact_tag')
+                content.label(text='Used by Export Bone Volume Data.')
+            return
+
+        content.prop(settings, 'export_geometry')
+        geometry = content.column()
+        geometry.enabled = settings.export_geometry
+        geometry.prop(settings, 'screen_size')
+        if mesh.object_type == 'DAZZLE':
+            if not settings.is_property_set('dazzle_name') and mesh.is_property_set('dazzle_type'):
+                geometry.prop(mesh, 'dazzle_type')
+                if mesh.dazzle_type == 'CUSTOM':
+                    geometry.prop(mesh, 'dazzle_type_custom')
+            else:
+                geometry.prop(settings, 'dazzle_name')
+                if settings.dazzle_name == 'CUSTOM':
+                    geometry.prop(settings, 'dazzle_name_custom')
+            return
+        if mesh.object_type == 'BOX':
+            geometry.prop(mesh, 'box_type', text='Box Type')
+            geometry.prop(mesh, 'box_collision_types')
+            return
+
+        geometry.prop(settings, 'static_sort_level')
+        geometry.prop(mesh, 'userText')
+        flags = geometry.box()
+        flags.label(text='Geometry Flags')
+        grid = flags.grid_flow(row_major=True, columns=2, even_columns=True)
+        for prop in ('geom_hide', 'geom_two_sided', 'geom_shadow', 'geom_vertex_alpha',
+                     'geom_z_normal', 'geom_shatter', 'geom_tangents', 'geom_keep_normals',
+                     'geom_prelit', 'geom_always_dyn_light'):
+            grid.prop(settings, prop)
+        collisions = geometry.box()
+        collisions.label(text='Collision Flags')
+        grid = collisions.grid_flow(row_major=True, columns=2, even_columns=True)
+        for prop in ('coll_physical', 'coll_projectile', 'coll_vis', 'coll_camera', 'coll_vehicle'):
+            grid.prop(settings, prop)
 
 
 class BONE_PROPERTIES_PANEL_PT_w3d(Panel):
@@ -1241,6 +1230,11 @@ class BONE_PROPERTIES_PANEL_PT_w3d(Panel):
         if context.active_bone is not None:
             col = layout.column()
             col.prop(context.active_bone, 'visibility')
+            description = game_bone_description(context.active_bone.name)
+            if description:
+                col.label(text=description)
+                if context.object and context.object.type == 'ARMATURE':
+                    col.prop(context.object.w3d_object_settings, 'show_game_bone_directions')
 
 
 class SCENE_PROPERTIES_PANEL_PT_w3d_workflow(Panel):
@@ -1457,7 +1451,28 @@ class TOOLS_PANEL_PT_w3d(bpy.types.Panel):
         export_box.operator('scene.export_bone_volume_data', icon='BONE_DATA', text='Export Bone Volume Data')
 
 
+def _update_dazzle_ini(self, context):
+    refresh_dazzle_items(bpy.path.abspath(self.dazzle_ini_path))
+
+
+class W3DAddonPreferences(AddonPreferences):
+    bl_idname = __package__
+
+    dazzle_ini_path: StringProperty(
+        name='Dazzle INI',
+        description='Game dazzle.ini file used to populate the Dazzle Type list',
+        subtype='FILE_PATH',
+        default='',
+        update=_update_dazzle_ini)
+
+    def draw(self, context):
+        self.layout.prop(self, 'dazzle_ini_path')
+        self.layout.label(text="Choose your game's dazzle.ini to list its dazzle types.")
+        self.layout.label(text='Imported custom types are preserved even without this file.')
+
+
 CLASSES = (
+    W3DAddonPreferences,
     ExportW3D,
     ImportW3D,
     W3D_OT_show_export_log,
@@ -1484,6 +1499,7 @@ CLASSES = (
     W3DSceneSettings,
     ShaderProperties,
     OBJECT_PROPERTIES_PANEL_PT_w3d,
+    W3D_OT_open_object_settings,
     MESH_PROPERTIES_PANEL_PT_w3d,
     BONE_PROPERTIES_PANEL_PT_w3d,
     SCENE_PROPERTIES_PANEL_PT_w3d_workflow,

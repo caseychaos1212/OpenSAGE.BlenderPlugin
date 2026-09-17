@@ -74,7 +74,7 @@ def create_attachment_array(role, hierarchy, objects):
     if not attachments:
         return None
 
-    array_type = HLodAggregateArray if role == 'AGGREGATE' else HLodProxyArray
+    array_type = {'AGGREGATE': HLodAggregateArray, 'PROXY': HLodProxyArray, 'LIGHT': HLodLightArray}[role]
     array = array_type(
         header=HLodArrayHeader(
             model_count=len(attachments),
@@ -110,7 +110,9 @@ def create_hlod(hierarchy, container_name):
         hlod.lod_arrays.append(lod_array)
     hlod.aggregate_array = create_attachment_array('AGGREGATE', hierarchy, bpy.context.scene.objects)
     hlod.proxy_array = create_attachment_array('PROXY', hierarchy, bpy.context.scene.objects)
-    if not hlod.lod_arrays and (hlod.aggregate_array is not None or hlod.proxy_array is not None):
+    hlod.light_array = create_attachment_array('LIGHT', hierarchy, bpy.context.scene.objects)
+    if not hlod.lod_arrays and any(array is not None for array in (
+            hlod.aggregate_array, hlod.proxy_array, hlod.light_array)):
         hlod.lod_arrays.append(HLodLodArray(
             header=HLodArrayHeader(model_count=0, max_screen_size=MAX_SCREEN_SIZE),
             sub_objects=[]))

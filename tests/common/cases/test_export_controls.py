@@ -181,23 +181,26 @@ class TestExportControls(TestCase):
         self.assertIsNotNone(exported)
         self.assertEqual('building', exported.hlod.aggregate_array.sub_objects[0].identifier)
 
-    def test_aggregate_geometry_dropdown_remains_available(self):
+    def test_attachment_role_remains_available_when_changing_roles(self):
         obj = self.new_object('building')
         settings = obj.w3d_object_settings
         context = SimpleNamespace(active_object=obj)
-        for geometry_type in ('NORMAL', 'AGGREGATE', 'NORMAL'):
-            with self.subTest(geometry_type=geometry_type):
-                settings.geometry_type = geometry_type
-                layout = Mock()
-                layout.box.return_value = layout
-                layout.grid_flow.return_value = layout
-                layout.row.return_value = layout
-                panel = SimpleNamespace(layout=layout)
-                MESH_PROPERTIES_PANEL_PT_w3d.draw(panel, context)
-                layout.prop.assert_any_call(settings, 'geometry_type')
-                layout.prop.assert_any_call(settings, 'export_object')
-        self.assertEqual('LOD', get_hlod_role(obj))
+        settings.geometry_type = 'AGGREGATE'
+        self.assertEqual('AGGREGATE', settings.hlod_role)
+        for role in ('AGGREGATE', 'PROXY', 'LOD'):
+            settings.hlod_role = role
+            layout = Mock()
+            layout.column.return_value = layout
+            layout.box.return_value = layout
+            layout.grid_flow.return_value = layout
+            panel = SimpleNamespace(layout=layout)
+            OBJECT_PROPERTIES_PANEL_PT_w3d.draw(panel, context)
+            layout.prop.assert_any_call(settings, 'hlod_role')
+            layout.prop.assert_any_call(settings, 'export_object')
+            self.assertEqual(role, get_hlod_role(obj))
+        self.assertEqual('NORMAL', settings.geometry_type)
 
         layout = Mock()
-        OBJECT_PROPERTIES_PANEL_PT_w3d.draw(SimpleNamespace(layout=layout), context)
-        layout.prop.assert_any_call(settings, 'export_object')
+        MESH_PROPERTIES_PANEL_PT_w3d.draw(SimpleNamespace(layout=layout), context)
+        layout.prop.assert_not_called()
+        layout.operator.assert_called_once_with('w3d.open_object_settings', icon='OBJECT_DATA')

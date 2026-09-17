@@ -101,15 +101,9 @@ def create_mesh(context, mesh_struct, coll, hierarchy=None, sub_object=None):
         create_vertex_material(
             context, principleds, mesh_struct, mesh, b_mesh, actual_mesh_name, triangles, mesh_ob)
 
-        for i, shader in enumerate(mesh_struct.shaders):
-            set_shader_properties(mesh.materials[min(i, len(mesh.materials) - 1)], shader)
-
     elif mesh_struct.prelit_vertex:
         create_vertex_material(context, principleds, mesh_struct.prelit_vertex,
                                mesh, b_mesh, actual_mesh_name, triangles, mesh_ob)
-
-        for i, shader in enumerate(mesh_struct.prelit_vertex.shaders):
-            set_shader_properties(mesh.materials[i], shader)
 
     # shader material stuff
     elif mesh_struct.shader_materials:
@@ -123,6 +117,7 @@ def create_mesh(context, mesh_struct, coll, hierarchy=None, sub_object=None):
             create_uvlayer(context, mesh, b_mesh, triangles, mat_pass)
             create_uvlayer_2(context, mesh, b_mesh, triangles, mat_pass)
 
+    b_mesh.free()
     mesh.update()
     if mesh.validate(verbose=True):
         context.info(f'mesh \'{actual_mesh_name}\' has been fixed')

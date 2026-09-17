@@ -188,15 +188,28 @@ class HLodProxyArray(HLodBaseArray):
         super().write_base(io_stream, W3D_CHUNK_HLOD_PROXY_ARRAY)
 
 
+W3D_CHUNK_HLOD_LIGHT_ARRAY = 0x00000707
+
+
+class HLodLightArray(HLodBaseArray):
+    @staticmethod
+    def read(context, io_stream, chunk_end):
+        return HLodBaseArray.read_base(context, io_stream, chunk_end, HLodLightArray())
+
+    def write(self, io_stream):
+        super().write_base(io_stream, W3D_CHUNK_HLOD_LIGHT_ARRAY)
+
+
 W3D_CHUNK_HLOD = 0x00000700
 
 
 class HLod:
-    def __init__(self, header=None, lod_arrays=None, aggregate_array=None, proxy_array=None):
+    def __init__(self, header=None, lod_arrays=None, aggregate_array=None, proxy_array=None, light_array=None):
         self.header = header
         self.lod_arrays = lod_arrays if lod_arrays is not None else []
         self.aggregate_array = aggregate_array
         self.proxy_array = proxy_array
+        self.light_array = light_array
 
     def model_name(self):
         return self.header.model_name
@@ -229,6 +242,8 @@ class HLod:
                 result.aggregate_array = HLodAggregateArray.read(context, io_stream, subchunk_end)
             elif chunk_type == W3D_CHUNK_HLOD_PROXY_ARRAY:
                 result.proxy_array = HLodProxyArray.read(context, io_stream, subchunk_end)
+            elif chunk_type == W3D_CHUNK_HLOD_LIGHT_ARRAY:
+                result.light_array = HLodLightArray.read(context, io_stream, subchunk_end)
             else:
                 skip_unknown_chunk(context, io_stream, chunk_type, chunk_size)
         return result
@@ -242,6 +257,8 @@ class HLod:
             size += self.aggregate_array.size()
         if self.proxy_array is not None:
             size += self.proxy_array.size()
+        if self.light_array is not None:
+            size += self.light_array.size()
         return size
 
     def write(self, io_stream):
@@ -253,6 +270,8 @@ class HLod:
 
         if self.aggregate_array is not None:
             self.aggregate_array.write(io_stream)
+        if self.light_array is not None:
+            self.light_array.write(io_stream)
         if self.proxy_array is not None:
             self.proxy_array.write(io_stream)
 

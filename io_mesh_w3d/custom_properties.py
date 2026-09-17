@@ -3,6 +3,7 @@
 
 import configparser
 import os
+import zlib
 from pathlib import Path
 
 import bpy
@@ -44,6 +45,11 @@ def _sync_scene_objects(scene_settings, context):
         pass
 
 
+def _update_game_bone_directions(settings, context):
+    from .common.utils.bone_display import apply_game_bone_shapes
+    apply_game_bone_shapes(settings.id_data, settings.show_game_bone_directions)
+
+
 W3D_GEOMETRY_TYPE_ITEMS = [
     ('NORMAL', 'Normal', 'Standard geometry.'),
     ('CAM_PARAL', 'Cam-Paral', 'Camera parallel billboard.'),
@@ -60,7 +66,77 @@ W3D_HLOD_ROLE_ITEMS = [
     ('LOD', 'LOD Geometry', 'Export this object as normal geometry and include it in the HLOD LOD arrays.'),
     ('AGGREGATE', 'Aggregate', 'Export this object as an aggregate attachment entry only; no mesh chunk is written.'),
     ('PROXY', 'Proxy', 'Export this object as a proxy attachment entry only; no mesh chunk is written.'),
+    ('LIGHT', 'Light Reference', 'Export an HLOD light reference; no mesh or light definition is written.'),
 ]
+
+W3D_EXPORT_TYPE_ITEMS = [
+    ('MESH', 'Mesh', 'Export mesh geometry'),
+    ('CAM_PARAL', 'Camera Parallel', 'Export camera-parallel billboard geometry'),
+    ('CAM_ORIENT', 'Camera Oriented', 'Export camera-oriented billboard geometry'),
+    ('BOX', 'Collision Box', 'Export a collision box'),
+    ('DAZZLE', 'Dazzle', 'Export a dazzle light'),
+    ('GEOMETRY', 'Geometry Helper', 'Used by Export Geometry Data'),
+    ('BONE_VOLUME', 'Bone Volume', 'Used by Export Bone Volume Data'),
+]
+
+
+def _get_export_type(settings):
+    from .common.utils.object_settings_bridge import get_export_type
+    kind = get_export_type(settings.id_data)
+    return next((i for i, item in enumerate(W3D_EXPORT_TYPE_ITEMS) if item[0] == kind), 0)
+
+
+def _set_export_type(settings, value):
+    from .common.utils.object_settings_bridge import set_export_type
+    set_export_type(settings.id_data, W3D_EXPORT_TYPE_ITEMS[value][0])
+
+
+def _get_hlod_role(settings):
+    value = settings.get('hlod_role', 0)
+    if value == 0 and settings.geometry_type == 'AGGREGATE':
+        return 1
+    return value
+
+
+def _set_hlod_role(settings, value):
+    settings['hlod_role'] = value
+    # The old Geometry Type aggregate flag must not override a new role choice.
+    if settings.geometry_type == 'AGGREGATE':
+        settings.geometry_type = 'NORMAL'
+
+
+def _legacy_mesh_setting(settings, current, legacy, default):
+    if current in settings:
+        return settings[current]
+    mesh = getattr(settings.id_data, 'data', None)
+    if isinstance(mesh, Mesh) and mesh.is_property_set(legacy):
+        return getattr(mesh, legacy)
+    return default
+
+
+def _get_sort_level(settings):
+    return _legacy_mesh_setting(settings, 'static_sort_level', 'sort_level', 0)
+
+
+def _set_sort_level(settings, value):
+    settings['static_sort_level'] = value
+
+
+def _get_shadow(settings):
+    return _legacy_mesh_setting(settings, 'geom_shadow', 'casts_shadow', False)
+
+
+def _set_shadow(settings, value):
+    settings['geom_shadow'] = value
+
+
+def _get_two_sided(settings):
+    return _legacy_mesh_setting(settings, 'geom_two_sided', 'two_sided', False)
+
+
+def _set_two_sided(settings, value):
+    settings['geom_two_sided'] = value
+
 
 W3D_STAGE_ANIM_ITEMS = [
     ('LOOP', 'Loop', 'Repeat animation indefinitely.'),
@@ -302,6 +378,25 @@ def _load_dazzle_items():
 
 DEFAULT_DAZZLE_ITEMS = _load_dazzle_items()
 _DAZZLE_CACHE = {'path': None, 'items': DEFAULT_DAZZLE_ITEMS}
+# An explicit enum value keeps Custom stable when a different INI is loaded.
+_CUSTOM_DAZZLE_ITEM = ('CUSTOM', 'Custom', 'Use a game-specific dazzle type name', 2147483646)
+# Retain strings returned by dynamic enum callbacks for Blender's RNA lifetime.
+_DAZZLE_ENUM_ITEMS = {
+    item[0]: (*item, index) for index, item in enumerate(DEFAULT_DAZZLE_ITEMS)
+}
+
+
+def _dazzle_enum_item(item):
+    if item[0] not in _DAZZLE_ENUM_ITEMS:
+        # INI ordering can change between games and Blender sessions.
+        number = 1024 + (zlib.crc32(item[0].encode('utf-8')) & 0x3fffffff)
+        _DAZZLE_ENUM_ITEMS[item[0]] = (*item[:3], number)
+    return _DAZZLE_ENUM_ITEMS[item[0]]
+
+
+def _remember_dazzle_name(self, context):
+    if self.dazzle_name != 'CUSTOM':
+        self.dazzle_name_custom = self.dazzle_name
 
 
 def _load_items_from_path(path):
@@ -329,7 +424,7 @@ def _load_items_from_path(path):
 
 def refresh_dazzle_items(path):
     """Refresh the cached dazzle enum list."""
-    resolved = os.path.abspath(path) if path else ''
+    resolved = os.path.abspath(bpy.path.abspath(path)) if path else ''
     if _DAZZLE_CACHE['path'] == resolved:
         return
     _DAZZLE_CACHE['items'] = _load_items_from_path(resolved)
@@ -341,8 +436,13 @@ def get_dazzle_enum_items(self, context):
         prefs = context.preferences.addons.get(__package__)
         if prefs and getattr(prefs, 'preferences', None):
             refresh_dazzle_items(prefs.preferences.dazzle_ini_path)
-    items = _DAZZLE_CACHE.get('items') or [('DEFAULT', 'DEFAULT', 'Default dazzle preset')]
-    return items
+    items = {item[0]: item for item in DEFAULT_DAZZLE_ITEMS}
+    items.update({item[0]: item for item in _DAZZLE_CACHE.get('items', [])})
+    # A saved selection remains available when its INI is missing or replaced.
+    saved_name = getattr(self, 'dazzle_name_custom', '')
+    if saved_name and self.is_property_set('dazzle_name') and self.get('dazzle_name') != _CUSTOM_DAZZLE_ITEM[3]:
+        items.setdefault(saved_name, (saved_name, saved_name, 'Saved dazzle type'))
+    return [_dazzle_enum_item(item) for item in items.values() if item[0] != 'CUSTOM'] + [_CUSTOM_DAZZLE_ITEM]
 
 
 class W3DStageSettings(PropertyGroup):
@@ -597,6 +697,17 @@ class W3DMaterialSettings(PropertyGroup):
 
 
 class W3DObjectSettings(PropertyGroup):
+    export_type: EnumProperty(
+        name='Export Type',
+        description='Choose the exported data type; mesh classification is shared by linked objects',
+        items=W3D_EXPORT_TYPE_ITEMS,
+        get=_get_export_type,
+        set=_set_export_type)
+    show_game_bone_directions: BoolProperty(
+        name='Game Bone Directions',
+        description='Show firing, suspension, and rotation axes for named W3D bones in Object and Pose Mode',
+        default=False,
+        update=_update_game_bone_directions)
     export_object: BoolProperty(
         name='Export Object',
         description='Include this object in W3D/W3X export. Disable to omit its geometry, transform, and HLOD attachment',
@@ -608,34 +719,63 @@ class W3DObjectSettings(PropertyGroup):
         default=True)
     hlod_role: EnumProperty(
         name='HLOD Role',
-        description='Choose whether this object exports as regular geometry, an aggregate attachment, or a proxy attachment',
+        description='Choose regular geometry, an aggregate or proxy attachment, or an HLOD light reference',
         items=W3D_HLOD_ROLE_ITEMS,
-        default='LOD')
+        default='LOD',
+        get=_get_hlod_role,
+        set=_set_hlod_role)
     hlod_identifier: StringProperty(
         name='Attachment Identifier',
-        description='Exact identifier written to the HLOD aggregate/proxy array. Leave blank to use the object name; proxies strip everything after "~" so unique Blender suffixes do not affect export',
+        description='Exact identifier written to the HLOD aggregate/proxy/light array. Leave blank to use the object name; proxies strip everything after "~" so unique Blender suffixes do not affect export',
         default='')
     geometry_type: EnumProperty(
         name='Geometry Type',
         items=W3D_GEOMETRY_TYPE_ITEMS,
         default='NORMAL',
         update=_sync_object_type_from_settings)
-    static_sort_level: IntProperty(name='Static Sort Level', default=0, min=0, max=32)
+    static_sort_level: IntProperty(
+        name='Static Sort Level', default=0, min=0, max=32, get=_get_sort_level, set=_set_sort_level)
     screen_size: FloatProperty(name='Screen Size', default=1.0, min=0.0)
     dazzle_name: EnumProperty(
         name='Dazzle',
         items=get_dazzle_enum_items,
-        default=0)
+        default=0,
+        update=_remember_dazzle_name)
+    dazzle_name_custom: StringProperty(
+        name='Custom Dazzle Type',
+        description='Exact type name from the game dazzle.ini, preserved when its preset is unavailable',
+        default='')
     geom_hide: BoolProperty(name='Hide', default=False)
-    geom_two_sided: BoolProperty(name='Two Sided', default=False)
-    geom_shadow: BoolProperty(name='Shadow', default=False)
-    geom_vertex_alpha: BoolProperty(name='Vertex Alpha', default=False)
-    geom_z_normal: BoolProperty(name='Z Normal', default=False)
-    geom_shatter: BoolProperty(name='Shatter', default=False)
-    geom_tangents: BoolProperty(name='Tangents', default=False)
-    geom_keep_normals: BoolProperty(name='Keep Normals', default=False)
-    geom_prelit: BoolProperty(name='Prelit', default=False)
-    geom_always_dyn_light: BoolProperty(name='Always Dynamic Light', default=False)
+    geom_two_sided: BoolProperty(name='Two Sided', default=False, get=_get_two_sided, set=_set_two_sided)
+    geom_shadow: BoolProperty(name='Shadow', default=False, get=_get_shadow, set=_set_shadow)
+    geom_vertex_alpha: BoolProperty(
+        name='Vertex Alpha',
+        description='Use the active color attribute RGB average as vertex alpha on alpha-blended or alpha-tested passes, matching Max. Existing imported alpha exports independently',
+        default=False)
+    geom_z_normal: BoolProperty(
+        name='Z Normal',
+        description='Force all exported vertex normals to (0, 0, 1), including secondary skin normals. Overrides Keep Normals',
+        default=False)
+    geom_shatter: BoolProperty(
+        name='Shatter',
+        description='Write the W3D shatterable mesh flag for the game shatter system',
+        default=False)
+    geom_tangents: BoolProperty(
+        name='Tangents',
+        description='Write tangent and binormal vectors in the first W3D material pass, matching the Max Tangents flag. Requires UV coordinates',
+        default=False)
+    geom_keep_normals: BoolProperty(
+        name='Keep Normals',
+        description='Preserve authored corner normals and hard edges through triangulation and UV splitting. Overrides Smooth Vertex Normals',
+        default=False)
+    geom_prelit: BoolProperty(
+        name='Prelit',
+        description='Write the Max/TT prelit mesh flag (W3D). This does not bake lighting or create legacy lightmap chunks',
+        default=False)
+    geom_always_dyn_light: BoolProperty(
+        name='Always Dynamic Light',
+        description='Write the Max/TT always-dynamically-lit mesh flag (W3D)',
+        default=False)
     coll_physical: BoolProperty(name='Physical Collision', default=False)
     coll_projectile: BoolProperty(name='Projectile Collision', default=False)
     coll_vis: BoolProperty(name='Vis Collision', default=False)
@@ -702,8 +842,14 @@ Mesh.dazzle_type = EnumProperty(
         ('REN_BLINKLIGHT_RED', 'Ren blinklight red', 'desc: todo'),
         ('REN_BLINKLIGHT_WHITE', 'Ren blinklight white', 'desc: todo'),
         ('REN_VEHICLELIGHT_RED', 'Ren vehicle light red', 'desc: todo'),
-        ('REN_VEHICLELIGHT_WHITE', 'Ren vehicle light white', 'desc: todo')],
+        ('REN_VEHICLELIGHT_WHITE', 'Ren vehicle light white', 'desc: todo'),
+        ('CUSTOM', 'Custom', 'Use a game-specific dazzle type name')],
     default='DEFAULT')
+
+Mesh.dazzle_type_custom = StringProperty(
+    name='Custom Dazzle Type',
+    description='Exact game-specific dazzle type name',
+    default='')
 
 Mesh.geometry_type = EnumProperty(
     name='Geometry Type',

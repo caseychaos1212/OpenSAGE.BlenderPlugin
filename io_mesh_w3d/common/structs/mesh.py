@@ -7,6 +7,7 @@ from ...common.structs.mesh_structs.shader_material import *
 from ...common.structs.mesh_structs.triangle import *
 from ...common.structs.mesh_structs.vertex_influence import *
 from ...w3d.structs.mesh_structs.prelit import *
+from ...w3d.structs.mesh_structs.material_pass import W3D_CHUNK_TANGENTS, W3D_CHUNK_BITANGENTS
 from ...w3d.structs.version import Version
 from ...w3x.structs.mesh_structs.bounding_box import *
 from ...w3x.structs.mesh_structs.bounding_sphere import *
@@ -21,6 +22,11 @@ GEOMETRY_TYPE_CAST_SHADOW = 0x00008000
 GEOMETRY_TYPE_CAMERA_ALIGNED = 0x00010000
 GEOMETRY_TYPE_SKIN = 0x00020000
 GEOMETRY_TYPE_CAMERA_ORIENTED = 0x00060000
+GEOMETRY_TYPE_SHATTERABLE = 0x10000000
+GEOMETRY_TYPE_NPATCHABLE = 0x20000000
+# Max/TT runtime flags, distinct from the legacy PRELIT_* material wrappers.
+GEOMETRY_TYPE_PRELIT = 0x40000000
+GEOMETRY_TYPE_ALWAYS_DYN_LIGHT = 0x80000000
 
 # Collision type flags (match W3D_MESH_FLAG_COLLISION_TYPE_*)
 GEOMETRY_COLLISION_BOX = 0x00000001
@@ -143,8 +149,6 @@ W3D_CHUNK_VERTEX_INFLUENCES = 0x0000000E
 W3D_CHUNK_TRIANGLES = 0x00000020
 W3D_CHUNK_VERTEX_SHADE_INDICES = 0x00000022
 W3D_CHUNK_SHADER_MATERIALS = 0x50
-W3D_CHUNK_TANGENTS = 0x60
-W3D_CHUNK_BITANGENTS = 0x61
 
 
 class Mesh:
@@ -256,11 +260,9 @@ class Mesh:
                 result.shader_materials = read_chunk_array(context, io_stream, subchunk_end, W3D_CHUNK_SHADER_MATERIAL,
                                                            ShaderMaterial.read)
             elif chunk_type == W3D_CHUNK_TANGENTS:
-                context.info('-> tangents are computed in blender')
-                io_stream.seek(chunk_size, 1)
+                result.tangents = read_list(io_stream, subchunk_end, read_vector)
             elif chunk_type == W3D_CHUNK_BITANGENTS:
-                context.info('-> bitangents are computed in blender')
-                io_stream.seek(chunk_size, 1)
+                result.bitangents = read_list(io_stream, subchunk_end, read_vector)
             elif chunk_type == W3D_CHUNK_AABBTREE:
                 result.aabbtree = AABBTree.read(context, io_stream, subchunk_end)
             elif chunk_type == W3D_CHUNK_PRELIT_UNLIT:

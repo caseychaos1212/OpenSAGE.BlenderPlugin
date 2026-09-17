@@ -145,31 +145,32 @@ def rig_object(obj, hierarchy, rig, sub_object):
         obj.matrix_parent_inverse = Matrix.Translation((0, -rig.data.bones[pivot.name].length, 0))
 
 
-def create_uvlayer(context, mesh, b_mesh, tris, mat_pass):
+def create_uvlayer(context, mesh, b_mesh, tris, mat_pass, stage_index=0):
     tx_coords = None
-    if mat_pass.tx_coords:
+    if mat_pass.tx_coords and stage_index == 0:
         tx_coords = mat_pass.tx_coords
-    else:
-        if mat_pass.tx_stages:
-            if len(mat_pass.tx_stages[0].tx_coords) == 0:
-                context.warning('texture stage did not have texture coordinates!')
-                return
-            tx_coords = mat_pass.tx_stages[0].tx_coords[0]
-            if len(mat_pass.tx_stages[0].tx_coords) > 1:
-                context.warning('only one set of texture coordinates per texture stage supported')
-        if len(mat_pass.tx_stages) > 1:
-            context.warning('only one texture stage per material pass supported')
+    elif stage_index < len(mat_pass.tx_stages):
+        stage = mat_pass.tx_stages[stage_index]
+        if not stage.tx_coords:
+            context.warning('texture stage did not have texture coordinates!')
+            return None
+        tx_coords = stage.tx_coords[0]
+        if len(stage.tx_coords) > 1:
+            context.warning('only one set of texture coordinates per texture stage supported')
 
-    if tx_coords is None:
-        if mesh is not None:
-            uv_layer = mesh.uv_layers.new(do_init=False)
-        return
-
+    if mesh is None:
+        return None
     uv_layer = mesh.uv_layers.new(do_init=False)
-    for i, face in enumerate(b_mesh.faces):
-        for loop in face.loops:
-            idx = tris[i][loop.index % 3]
-            set_uv(uv_layer, loop.index, tx_coords[idx].xy)
+    if uv_layer is None:
+        context.warning('Blender UV layer limit reached; additional texture coordinates cannot be imported')
+        return None
+    if tx_coords is not None:
+        for polygon in mesh.polygons:
+            for loop_index in polygon.loop_indices:
+                vertex_index = mesh.loops[loop_index].vertex_index
+                if vertex_index < len(tx_coords):
+                    set_uv(uv_layer, loop_index, tx_coords[vertex_index].xy)
+    return uv_layer
 
 
 def create_uvlayer_2(context, mesh, b_mesh, tris, mat_pass):
@@ -191,6 +192,7 @@ extensions = ['.dds', '.tga', '.jpg', '.jpeg', '.png', '.bmp']
 
 
 def find_texture(context, file, name=None):
+    requested_extension = os.path.splitext(file)[1].lower()
     file = file.rsplit('.', 1)[0]
     if name is None:
         name = file
@@ -215,11 +217,12 @@ def find_texture(context, file, name=None):
 
     if img is None:
         context.warning(
-            f'texture not found: {filepath} {extensions}. Make sure it is right next to the file you are importing!')
-        img = bpy.data.images.new(name, width=2048, height=2048)
-        img.generated_type = 'COLOR_GRID'
-        img.source = 'GENERATED'
-        img.name = name + extensions[0]
+            f'texture not found: {filepath} {extensions}. Use File > External Data > Find Missing Files to locate it.')
+        extension = requested_extension if requested_extension in extensions else extensions[0]
+        img = bpy.data.images.new(name + extension, width=1, height=1)
+        # File-backed placeholders participate in Blender's Find Missing Files.
+        img.filepath = filepath + extension
+        img.source = 'FILE'
 
     img.alpha_mode = 'STRAIGHT'
     return img

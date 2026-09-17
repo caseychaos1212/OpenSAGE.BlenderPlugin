@@ -118,7 +118,8 @@ def retrieve_vertex_material(material, principled, settings=None, pass_settings=
     info.attributes |= int(state['stage1_mapping'], 16) & STAGE1_MAPPING_MASK
 
     vert_material = VertexMaterial(
-        vm_name=material.name.split('.', 1)[-1],
+        vm_name=(pass_settings.get('_w3d_vertex_material_name', material.name.split('.', 1)[-1])
+                 if pass_settings is not None else material.name.split('.', 1)[-1]),
         vm_info=info,
         vm_args_0=state['vm_args_0'].replace(' ', '').replace(',', '\r\n'),
         vm_args_1=state['vm_args_1'].replace(' ', '').replace(',', '\r\n'))
@@ -161,7 +162,7 @@ def to_vec(color):
     return Vector((color[0], color[1], color[2], color[3] if len(color) > 3 else 1.0))
 
 
-def retrieve_shader_material(context, material, principled, w3x=False):
+def retrieve_shader_material(context, material, principled, w3x=False, pass_settings=None):
     name = material.name.split('.', 1)[-1]
     if not name.endswith('.fx'):
         context.info(f'\'{name}\' is not a valid shader name -> defaulting to: \'{DEFAULT_W3D}\'')
@@ -190,7 +191,13 @@ def retrieve_shader_material(context, material, principled, w3x=False):
         append_property(shader_mat, 5, 'AmbientColor', to_vec(material.ambient), Vector((1.0, 1.0, 1.0, 0.0)))
         append_property(shader_mat, 5, 'EmissiveColor', to_vec(principled.emission_color), color_emissive_default)
 
-    if material.texture_1:
+    if pass_settings is not None:
+        stage0, stage1 = pass_settings.stage0, pass_settings.stage1
+        if stage0.enabled and stage0.texture:
+            append_property(shader_mat, 1, 'DiffuseTexture', stage0.texture.name)
+        if stage1.enabled and stage1.texture:
+            append_property(shader_mat, 1, 'Texture_1', stage1.texture.name)
+    elif material.texture_1:
         append_property(shader_mat, 1, 'Texture_0', principled.base_color_texture)
         append_property(shader_mat, 1, 'Texture_1', material.texture_1)
         append_property(shader_mat, 6, 'NumTextures', material.num_textures)
@@ -247,8 +254,8 @@ def retrieve_shader_material(context, material, principled, w3x=False):
     return shader_mat
 
 
-def retrieve_shader(material):
-    return Shader(
+def retrieve_shader(material, pass_settings=None):
+    shader = Shader(
         depth_compare=int(material.shader.depth_compare),
         depth_mask=int(material.shader.depth_mask),
         color_mask=material.shader.color_mask,
@@ -264,3 +271,9 @@ def retrieve_shader(material):
         alpha_test=int(material.shader.alpha_test),
         post_detail_color_func=int(material.shader.post_detail_color_func),
         post_detail_alpha_func=int(material.shader.post_detail_alpha_func))
+
+    if pass_settings is not None:
+        for key, value in pass_settings.get('_w3d_shader_extra', {}).items():
+            if key in ('color_mask', 'fog_func', 'shader_preset', 'post_detail_color_func', 'post_detail_alpha_func'):
+                setattr(shader, key, value)
+    return shader

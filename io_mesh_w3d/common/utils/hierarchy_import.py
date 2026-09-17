@@ -4,7 +4,6 @@
 import bpy
 from mathutils import Vector, Quaternion, Matrix
 from ...common.utils.helpers import *
-from ...common.utils.primitives import *
 
 REST_LOC_PROP = '_w3d_rest_location'
 REST_ROT_PROP = '_w3d_rest_rotation'
@@ -67,10 +66,7 @@ def create_bone_hierarchy(hierarchy, coll):
         bone.matrix = matrix
 
     bpy.ops.object.mode_set(mode='POSE')
-    (basic_sphere, sphere_mesh) = create_sphere()
-
     for bone in rig.pose.bones:
-        bone.custom_shape = basic_sphere
         pivot = pivot_lookup.get(bone.name)
         if pivot is not None:
             bone[REST_LOC_PROP] = (
@@ -85,8 +81,7 @@ def create_bone_hierarchy(hierarchy, coll):
 
     bpy.ops.object.mode_set(mode='OBJECT')
 
-    bpy.data.objects.remove(basic_sphere)
-    bpy.data.meshes.remove(sphere_mesh)
+    rig.w3d_object_settings.show_game_bone_directions = True
     return rig
 
 

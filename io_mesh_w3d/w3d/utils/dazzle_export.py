@@ -4,7 +4,7 @@
 from ...common.utils.helpers import *
 from ...w3d.structs.dazzle import *
 from ...common.utils.object_settings_bridge import (
-    get_object_settings,
+    get_dazzle_type,
     is_hlod_attachment,
     should_export_geometry,
 )
@@ -19,10 +19,7 @@ def retrieve_dazzles(container_name):
         if is_hlod_attachment(mesh_object) or not should_export_geometry(mesh_object):
             continue
         name = container_name + '.' + mesh_object.name
-        settings = get_object_settings(mesh_object)
-        type_name = mesh_object.data.dazzle_type
-        if settings is not None:
-            type_name = settings.dazzle_name
+        type_name = get_dazzle_type(mesh_object)
         dazzle = Dazzle(
             name_=name,
             type_name=type_name)

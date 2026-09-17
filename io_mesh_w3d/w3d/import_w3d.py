@@ -202,6 +202,11 @@ ANIM_MODE_FROM_INT = {
 
 
 def populate_material_settings_from_passes(obj, mesh_struct):
+    # Vertex materials already contain complete stacks, including per-face
+    # assignments. Source vertex-material IDs are not Blender slot indices.
+    if mesh_struct.vert_materials or mesh_struct.prelit_vertex:
+        return
+
     materials = list(obj.data.materials) if obj.data else []
     if not materials:
         return

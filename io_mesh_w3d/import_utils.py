@@ -12,7 +12,7 @@ from .w3d.utils.dazzle_import import *
 
 def create_attachment_placeholder(collection, sub_object, role):
     placeholder = bpy.data.objects.new(sub_object.identifier, None)
-    placeholder.empty_display_type = 'SPHERE' if role == 'AGGREGATE' else 'CUBE'
+    placeholder.empty_display_type = {'AGGREGATE': 'SPHERE', 'PROXY': 'CUBE', 'LIGHT': 'SINGLE_ARROW'}[role]
     placeholder.empty_display_size = 0.25
     link_object_to_active_scene(placeholder, collection)
 
@@ -82,7 +82,8 @@ def create_data(context, meshes, hlod=None, hierarchy=None, boxes=None, animatio
                     if dazzle.name() == sub_object.name:
                         create_dazzle(context, dazzle, collection)
 
-        for role, sub_array in (('AGGREGATE', hlod.aggregate_array), ('PROXY', hlod.proxy_array)):
+        for role, sub_array in (('AGGREGATE', hlod.aggregate_array), ('PROXY', hlod.proxy_array),
+                                ('LIGHT', hlod.light_array)):
             if sub_array is None:
                 continue
             for sub_object in sub_array.sub_objects:

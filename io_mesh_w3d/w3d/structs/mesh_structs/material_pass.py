@@ -67,11 +67,15 @@ W3D_CHUNK_DCG = 0x0000003B
 W3D_CHUNK_DIG = 0x0000003C
 W3D_CHUNK_SCG = 0x0000003E
 W3D_CHUNK_SHADER_MATERIAL_ID = 0x0000003F
+# Max writes these both at mesh level and in the first material pass for
+# geometry with its Tangents (NPatchable) flag enabled.
+W3D_CHUNK_TANGENTS = 0x00000060
+W3D_CHUNK_BITANGENTS = 0x00000061  # BINORMALS in the Max exporter
 
 
 class MaterialPass:
     def __init__(self, vertex_material_ids=None, shader_ids=None, dcg=None, dig=None, scg=None,
-                 shader_material_ids=None, tx_stages=None, tx_coords=None):
+                 shader_material_ids=None, tx_stages=None, tx_coords=None, tangents=None, bitangents=None):
         self.vertex_material_ids = vertex_material_ids if vertex_material_ids is not None else []
         self.shader_ids = shader_ids if shader_ids is not None else []
         self.dcg = dcg if dcg is not None else []
@@ -81,6 +85,8 @@ class MaterialPass:
         self.tx_stages = tx_stages if tx_stages is not None else []
         self.tx_coords = tx_coords if tx_coords is not None else []
         self.tx_coords_2 = tx_coords if tx_coords is not None else []
+        self.tangents = tangents if tangents is not None else []
+        self.bitangents = bitangents if bitangents is not None else []
 
     @staticmethod
     def read(context, io_stream, chunk_end):
@@ -105,6 +111,10 @@ class MaterialPass:
                 result.tx_stages.append(TextureStage.read(context, io_stream, subchunk_end))
             elif chunk_type == W3D_CHUNK_STAGE_TEXCOORDS:
                 result.tx_coords = read_list(io_stream, subchunk_end, read_vector2)
+            elif chunk_type == W3D_CHUNK_TANGENTS:
+                result.tangents = read_list(io_stream, subchunk_end, read_vector)
+            elif chunk_type == W3D_CHUNK_BITANGENTS:
+                result.bitangents = read_list(io_stream, subchunk_end, read_vector)
             else:
                 skip_unknown_chunk(context, io_stream, chunk_type, chunk_size)
         return result
@@ -120,6 +130,8 @@ class MaterialPass:
         size += list_size(self.tx_stages, False)
         size += vec2_list_size(self.tx_coords)
         #size += vec2_list_size(self.tx_coords_2)
+        size += vec_list_size(self.tangents)
+        size += vec_list_size(self.bitangents)
         return size
 
     def write(self, io_stream):
@@ -157,3 +169,10 @@ class MaterialPass:
             write_chunk_head(W3D_CHUNK_STAGE_TEXCOORDS, io_stream,
                              vec2_list_size(self.tx_coords, False))
             write_list(self.tx_coords, io_stream, write_vector2)
+
+        if self.tangents:
+            write_chunk_head(W3D_CHUNK_TANGENTS, io_stream, vec_list_size(self.tangents, False))
+            write_list(self.tangents, io_stream, write_vector)
+        if self.bitangents:
+            write_chunk_head(W3D_CHUNK_BITANGENTS, io_stream, vec_list_size(self.bitangents, False))
+            write_list(self.bitangents, io_stream, write_vector)
