@@ -209,7 +209,7 @@ def apply_object_settings_to_header(obj, header):
 
 def get_screen_size(obj, default_value):
     settings = get_object_settings(obj)
-    if settings is None or settings.screen_size <= 0.0:
+    if settings is None or not settings.is_property_set('screen_size') or settings.screen_size <= 0.0:
         return default_value
     return settings.screen_size
 

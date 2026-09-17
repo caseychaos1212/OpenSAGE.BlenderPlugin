@@ -2,7 +2,7 @@
 # Written by Stephan Vedder and Michael Schnabel
 
 import bpy
-from mathutils import Vector, Quaternion
+from mathutils import Vector, Quaternion, Matrix
 from ...common.utils.helpers import *
 from ...common.utils.primitives import *
 
@@ -46,11 +46,15 @@ def create_rig(name, root, coll):
 def create_bone_hierarchy(hierarchy, coll):
     root = hierarchy.pivots[0]
     rig, armature = create_rig(hierarchy.name(), root, coll)
+    rig['_w3d_root_bone'] = root.name
+    rig['_w3d_center'] = tuple(hierarchy.header.center_pos)
     pivot_lookup = {pivot.name: pivot for pivot in hierarchy.pivots}
 
     for pivot in hierarchy.pivots:
         bone = armature.edit_bones.new(pivot.name)
-        matrix = pivot_rest_matrix(pivot)
+        # The rig already carries the root rest transform. Keep an identity
+        # root bone for root-weighted vertices and rigid attachments.
+        matrix = Matrix.Identity(4) if pivot is root else pivot_rest_matrix(pivot)
 
         if pivot.parent_id >= 0:
             parent_pivot = hierarchy.pivots[pivot.parent_id]
@@ -58,7 +62,8 @@ def create_bone_hierarchy(hierarchy, coll):
             matrix = bone.parent.matrix @ matrix
 
         bone.head = Vector((0.0, 0.0, 0.0))
-        bone.tail = Vector((0.0, 0.0, 0.01))
+        # Very short bones lose orientation precision at large coordinates.
+        bone.tail = Vector((0.0, 0.0, 1.0))
         bone.matrix = matrix
 
     bpy.ops.object.mode_set(mode='POSE')

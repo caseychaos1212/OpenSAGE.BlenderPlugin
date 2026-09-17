@@ -896,10 +896,9 @@ Material.vm_args_1 = StringProperty(
 
 Material.technique = IntProperty(
     name='Technique',
-    description='Dont know yet',
+    description='Shader technique index',
     default=0,
-    min=0,
-    max=1)
+    min=0)
 
 Material.ambient = FloatVectorProperty(
     name='Ambient',

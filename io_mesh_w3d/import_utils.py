@@ -66,13 +66,13 @@ def create_data(context, meshes, hlod=None, hierarchy=None, boxes=None, animatio
                             existing_obj = _find_rigid_object(sub_object.name)
                             if existing_obj is not None:
                                 reused_rigid_mats[existing_obj.name] = _reuse_rigid_mesh(existing_obj)
-                                mesh.header.mesh_name = existing_obj.name
-                                mesh_names_map[mesh.name()] = existing_obj.name
+                                mesh_names_map[(id(sub_object), id(mesh))] = existing_obj.name
                                 reused_rigid_meshes.add(existing_obj.name)
                                 context.info(f"reusing existing rigid mesh '{existing_obj.name}'")
                                 continue
                         newname = create_mesh(context, mesh, current_coll, hierarchy, sub_object)
-                        mesh_names_map[mesh.name()] = newname
+                        mesh_names_map[(id(sub_object), id(mesh))] = newname
+                        bpy.data.objects[newname].w3d_object_settings.screen_size = lod_array.header.max_screen_size
 
                 for box in boxes:
                     if box.name() == sub_object.name:
@@ -96,15 +96,15 @@ def create_data(context, meshes, hlod=None, hierarchy=None, boxes=None, animatio
             for sub_object in lod_array.sub_objects:
                 for mesh in meshes:
                     if mesh.name() == sub_object.name:
-                        mesh.header.mesh_name = mesh_names_map[mesh.name()]
-                        if freeze_rigid and (not mesh.is_skin()) and mesh.header.mesh_name in reused_rigid_meshes:
-                            obj = bpy.data.objects.get(mesh.header.mesh_name)
+                        object_name = mesh_names_map[(id(sub_object), id(mesh))]
+                        if freeze_rigid and (not mesh.is_skin()) and object_name in reused_rigid_meshes:
+                            obj = bpy.data.objects.get(object_name)
                             if obj is not None:
                                 world_mat = reused_rigid_mats.get(obj.name, obj.matrix_world.copy())
                                 rig_object(obj, hierarchy, rig, sub_object)
                                 obj.matrix_world = world_mat
                             continue
-                        rig_mesh(mesh, hierarchy, rig, sub_object)
+                        rig_mesh(mesh, hierarchy, rig, sub_object, object_name=object_name)
                 for box in boxes:
                     if box.name() == sub_object.name:
                         rig_box(box, hierarchy, rig, sub_object)
@@ -124,7 +124,6 @@ def create_data(context, meshes, hlod=None, hierarchy=None, boxes=None, animatio
                 existing_obj = _find_rigid_object(mesh.name())
                 if existing_obj is not None:
                     reused_rigid_mats[existing_obj.name] = _reuse_rigid_mesh(existing_obj)
-                    mesh.header.mesh_name = existing_obj.name
                     reused_rigid_meshes.add(existing_obj.name)
                     context.info(f"reusing existing rigid mesh '{existing_obj.name}'")
                     continue

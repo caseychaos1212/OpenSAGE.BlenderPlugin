@@ -169,7 +169,7 @@ def retrieve_shader_material(context, material, principled, w3x=False):
 
     shader_mat = ShaderMaterial(
         header=ShaderMaterialHeader(
-            type_name=name),
+            type_name=name, technique=material.technique),
         properties=[])
 
     color_emissive_default = Vector((0.0, 0.0, 0.0, 1.0))
@@ -206,7 +206,8 @@ def retrieve_shader_material(context, material, principled, w3x=False):
     if principled.normalmap_texture is not None and principled.normalmap_texture.image is not None:
         if shader_mat.header.type_name == DEFAULT_W3D:
             shader_mat.header.type_name = 'NormalMapped.fx'
-        shader_mat.header.technique = W3D_NORMTYPE_BUMP
+        if not w3x:
+            shader_mat.header.technique = W3D_NORMTYPE_BUMP
         append_property(shader_mat, 2, 'BumpScale', principled.normalmap_strength, 1.0)
 
     append_property(shader_mat, 1, 'SpecMap', principled.specular_texture)
@@ -215,7 +216,9 @@ def retrieve_shader_material(context, material, principled, w3x=False):
     append_property(shader_mat, 7, 'AlphaTestEnable', material.alpha_test, True)
     append_property(shader_mat, 6, 'BlendMode', material.blend_mode)
     append_property(shader_mat, 3, 'BumpUVScale', material.bump_uv_scale)
-    append_property(shader_mat, 6, 'EdgeFadeOut', material.edge_fade_out)
+    edge_fade_type = material.get('_w3d_edge_fade_type', 2 if w3x else 6)
+    edge_fade_value = int(material.edge_fade_out) if edge_fade_type == 6 else material.edge_fade_out
+    append_property(shader_mat, edge_fade_type, 'EdgeFadeOut', edge_fade_value)
     append_property(shader_mat, 7, 'DepthWriteEnable', material.depth_write)
     append_property(shader_mat, 5, 'Sampler_ClampU_ClampV_NoMip_0',
                     material.sampler_clamp_uv_no_mip_0, Vector((0.0, 0.0, 0.0, 0.0)))

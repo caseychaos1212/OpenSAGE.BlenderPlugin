@@ -101,12 +101,12 @@ def compare_hlod_arrays(self, expected, actual, xml=False):
             self, expected.sub_objects[i], actual.sub_objects[i])
 
 
-def get_hlod(model_name='containerName', hierarchy_name='TestHierarchy'):
+def get_hlod(model_name='containerName', hierarchy_name='TestHierarchy', attachments=True):
     return HLod(
         header=get_hlod_header(model_name, hierarchy_name),
         lod_arrays=[get_hlod_lod_array()],
-        aggregate_array=get_hlod_aggregate_array(),
-        proxy_array=get_hlod_proxy_array())
+        aggregate_array=get_hlod_aggregate_array() if attachments else None,
+        proxy_array=get_hlod_proxy_array() if attachments else None)
 
 
 def get_hlod_minimal(model_name='containerName', hierarchy_name='TestHierarchy'):

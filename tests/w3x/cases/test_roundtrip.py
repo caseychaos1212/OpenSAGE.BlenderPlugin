@@ -62,7 +62,8 @@ class TestRoundtripW3X(TestCase):
         self.assertTrue(hierarchy_name.upper() in bpy.data.objects)
         self.assertTrue(hierarchy_name.upper() in bpy.data.armatures)
         amt = bpy.data.armatures[hierarchy_name.upper()]
-        self.assertEqual(7, len(amt.bones))
+        # The fork retains ROOTTRANSFORM as an explicit Blender bone.
+        self.assertEqual(8, len(amt.bones))
 
         self.assertTrue('sword' in bpy.data.objects)
         self.assertTrue('soldier' in bpy.data.objects)
@@ -103,7 +104,8 @@ class TestRoundtripW3X(TestCase):
         self.assertTrue('testname' in bpy.data.objects)
         self.assertTrue('testname' in bpy.data.armatures)
         amt = bpy.data.armatures['testname']
-        self.assertEqual(7, len(amt.bones))
+        # The fork retains ROOTTRANSFORM as an explicit Blender bone.
+        self.assertEqual(8, len(amt.bones))
 
         self.assertTrue('sword' in bpy.data.objects)
         self.assertTrue('soldier' in bpy.data.objects)
@@ -187,7 +189,8 @@ class TestRoundtripW3X(TestCase):
         self.assertTrue('testname_skl' in bpy.data.objects)
         self.assertTrue('testname_skl' in bpy.data.armatures)
         amt = bpy.data.armatures['testname_skl']
-        self.assertEqual(7, len(amt.bones))
+        # The fork retains ROOTTRANSFORM as an explicit Blender bone.
+        self.assertEqual(8, len(amt.bones))
 
         self.assertTrue('sword' in bpy.data.objects)
         self.assertTrue('soldier' in bpy.data.objects)
@@ -285,7 +288,8 @@ class TestRoundtripW3X(TestCase):
         self.assertTrue('testname_skl' in bpy.data.objects)
         self.assertTrue('testname_skl' in bpy.data.armatures)
         amt = bpy.data.armatures['testname_skl']
-        self.assertEqual(7, len(amt.bones))
+        # The fork retains ROOTTRANSFORM as an explicit Blender bone.
+        self.assertEqual(8, len(amt.bones))
 
         self.assertFalse('sword' in bpy.data.objects)
         self.assertFalse('soldier' in bpy.data.objects)
@@ -363,7 +367,8 @@ class TestRoundtripW3X(TestCase):
         self.assertTrue('testname_skl' in bpy.data.objects)
         self.assertTrue('testname_skl' in bpy.data.armatures)
         amt = bpy.data.armatures['testname_skl']
-        self.assertEqual(7, len(amt.bones))
+        # The fork retains ROOTTRANSFORM as an explicit Blender bone.
+        self.assertEqual(8, len(amt.bones))
 
         self.assertTrue('sword' in bpy.data.objects)
         self.assertTrue('soldier' in bpy.data.objects)

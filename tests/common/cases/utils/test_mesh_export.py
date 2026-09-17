@@ -105,7 +105,7 @@ class TestMeshExportUtils(TestCase):
 
         meshes, _ = retrieve_meshes(self, None, None, 'containerName')
 
-        compare_meshes(self, mesh, meshes[0])
+        compare_meshes(self, mesh, meshes[0], rebuilt_aabb=True)
 
     def test_retrieve_meshes_with_bone_weights_are_zero(self):
         coll = get_collection()
@@ -721,6 +721,9 @@ class TestMeshExportUtils(TestCase):
         create_mesh(self, mesh, get_collection())
 
         mesh = bpy.data.objects['mesh'].data
+        for layer in list(get_vertex_color_layers(mesh)):
+            layers = mesh.vertex_colors if bpy.app.version < (3, 2, 0) else mesh.color_attributes
+            layers.remove(layer)
         new_vertex_color_layer(mesh, 'invalid')
 
         with (patch.object(self, 'warning')) as report_func:

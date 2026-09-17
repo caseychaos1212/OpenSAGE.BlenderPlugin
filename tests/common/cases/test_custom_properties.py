@@ -115,7 +115,7 @@ class TestCustomProperties(TestCase):
         mat.technique = -1
         self.assertEqual(0, mat.technique)
         mat.technique = 2
-        self.assertEqual(1, mat.technique)
+        self.assertEqual(2, mat.technique)
 
         self.assertEqual((1.0, 1.0, 1.0, 0.0), to_vec4(mat.ambient))
         mat.ambient = (-1.0, -1.0, -1.0, -1.0)

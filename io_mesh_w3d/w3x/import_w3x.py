@@ -26,16 +26,28 @@ def load_file(context, data_context, path=None):
     if path is None:
         path = context.filepath
 
+    path = os.path.abspath(path)
+    path_key = os.path.normcase(path)
+    loaded_paths = getattr(data_context, '_w3x_loaded_paths', None)
+    if loaded_paths is None:
+        loaded_paths = set()
+        if data_context is not None:
+            data_context._w3x_loaded_paths = loaded_paths
+    if path_key in loaded_paths:
+        return True
+
     record_loaded_file(context, path)
     context.info(f'Loading file: {path}')
 
     if not os.path.exists(path):
         context.error(f'file not found: {path}')
-        return
+        return False
 
     root = find_root(context, path)
     if root is None:
-        return
+        return False
+    # Mark before descending so shared includes and cycles are processed once.
+    loaded_paths.add(path_key)
 
     directory = os.path.dirname(path)
     for node in root:
@@ -46,7 +58,9 @@ def load_file(context, data_context, path=None):
                 load_file(context, data_context, os.path.join(directory, source))
 
         elif node.tag == 'W3DMesh':
-            data_context.meshes.append(Mesh.parse(context, node))
+            mesh = Mesh.parse(context, node)
+            mesh._w3x_source = path_key
+            data_context.meshes.append(mesh)
         elif node.tag == 'W3DCollisionBox':
             data_context.collision_boxes.append(CollisionBox.parse(context, node))
         elif node.tag == 'W3DContainer':
@@ -59,6 +73,7 @@ def load_file(context, data_context, path=None):
             data_context.textures.append(Texture.parse(node))
         else:
             context.warning('unsupported node ' + node.tag + ' in file: ' + path)
+    return True
 
 
 ##########################################################################
@@ -77,7 +92,8 @@ def load(context):
         hierarchy=None,
         hlod=None)
 
-    load_file(context, data_context)
+    if not load_file(context, data_context):
+        return {'CANCELLED'}
 
     directory = os.path.dirname(context.filepath) + os.path.sep
 
@@ -164,7 +180,15 @@ def load(context):
     if data_context.hlod is None and (len(data_context.meshes) == 1 or len(data_context.collision_boxes) == 1):
         context.warning('Loaded only single mesh! This may cause problems to export the scene.')
 
-    meshes = data_context.meshes
+    # Animation/container includes may reference a model already in the scene.
+    # Reuse only dependencies with the same source file and asset identifier;
+    # explicitly importing a model again still creates a separate copy.
+    entry_path = os.path.normcase(os.path.abspath(context.filepath))
+    existing_meshes = {(obj.get('_w3x_source'), obj.get('_w3x_id'))
+                       for obj in bpy.context.scene.objects if obj.type == 'MESH'}
+    meshes = [mesh for mesh in data_context.meshes
+              if mesh._w3x_source == entry_path
+              or (mesh._w3x_source, mesh.name()) not in existing_meshes]
     hierarchy = data_context.hierarchy
     boxes = data_context.collision_boxes
     hlod = data_context.hlod

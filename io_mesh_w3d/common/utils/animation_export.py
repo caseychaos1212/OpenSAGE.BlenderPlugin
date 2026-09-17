@@ -27,6 +27,7 @@ def retrieve_channels(obj, hierarchy, timecoded, name=None, default_frame_range=
 
     channel = None
     channels = []
+    root_channels = []
 
     for fcu in iter_animation_data_fcurves(obj.animation_data):
         if name is None:
@@ -118,6 +119,27 @@ def retrieve_channels(obj, hierarchy, timecoded, name=None, default_frame_range=
 
         if is_translation(channel_type) or fcu.array_index == 3 or is_visibility(fcu):
             channels.append(channel)
+            if fcu.data_path in {'location', 'rotation_quaternion'}:
+                root_channels.append(channel)
+    # Root curves on imported rigs include the rest transform for display.
+    # File channels store only the animated offset from that rest transform.
+    if name is None and '_w3d_rest_location' in obj:
+        rest_location = obj['_w3d_rest_location']
+        rest_rotation = Quaternion(obj['_w3d_rest_rotation']).normalized()
+        for channel in root_channels:
+            if channel.pivot != 0 or channel.type == CHANNEL_VIS:
+                continue
+            values = channel.time_codes if timecoded else channel.data
+            for index, datum in enumerate(values):
+                value = datum.value if timecoded else datum
+                if is_translation(channel.type):
+                    value -= rest_location[channel.type]
+                elif channel.type == CHANNEL_Q:
+                    value = (rest_rotation.inverted() @ value).normalized()
+                if timecoded:
+                    datum.value = value
+                else:
+                    values[index] = value
     return channels
 
 

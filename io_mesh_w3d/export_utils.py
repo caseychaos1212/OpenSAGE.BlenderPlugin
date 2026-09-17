@@ -43,7 +43,7 @@ def save_data(context, export_settings):
 
 def retrieve_data(context, export_settings):
     export_mode = export_settings['mode']
-    renegade_mode = _renegade_workflow_enabled(context)
+    renegade_mode = context.file_format == 'W3D' and _renegade_workflow_enabled(context)
     if renegade_mode and export_mode == 'M':
         context.info('Renegade workflow enabled: upgrading Mesh export to Hierarchical Model to include hierarchy data.')
         export_mode = 'HM'

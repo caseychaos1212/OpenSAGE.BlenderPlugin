@@ -1,7 +1,7 @@
 # <pep8 compliant>
 # Written by Stephan Vedder and Michael Schnabel
 
-from mathutils import Vector
+from mathutils import Vector, Quaternion
 from ...common.utils.helpers import *
 from ...common.structs.hierarchy import *
 from ...common.utils.object_settings_bridge import should_export_object, should_export_transform
@@ -33,11 +33,21 @@ def retrieve_hierarchy(context, container_name):
 
         switch_to_pose(rig, 'REST')
 
-        root.translation = rig.delta_location
-        root.rotation = rig.delta_rotation_quaternion
+        root_name = rig.get('_w3d_root_bone')
+        # Also recognize rigs imported by earlier versions of this fork.
+        if root_name is None and '_w3d_rest_location' in rig and 'ROOTTRANSFORM' in rig.pose.bones:
+            root_name = 'ROOTTRANSFORM'
+        if root_name and root_name in rig.pose.bones:
+            root.name = root_name
+            pivot_id_dict[root_name] = 0
+            root.translation = Vector(rig['_w3d_rest_location'])
+            root.rotation = Quaternion(rig['_w3d_rest_rotation'])
+        else:
+            root.translation = rig.delta_location.copy()
+            root.rotation = rig.delta_rotation_quaternion.copy()
 
         hierarchy.header.name = rig.data.name
-        hierarchy.header.center_pos = rig.location
+        hierarchy.header.center_pos = Vector(rig.get('_w3d_center', (0, 0, 0))) if root_name else rig.location.copy()
 
         for bone in rig.pose.bones:
             process_bone(bone, pivot_id_dict, hierarchy)

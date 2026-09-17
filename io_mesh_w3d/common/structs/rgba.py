@@ -34,17 +34,17 @@ class RGBA:
 
     @staticmethod
     def read_f(io_stream):
-        return RGBA(r=int(read_float(io_stream) * 255),
-                    g=int(read_float(io_stream) * 255),
-                    b=int(read_float(io_stream) * 255),
-                    a=int(read_float(io_stream) * 255))
+        return RGBA(r=round(read_float(io_stream) * 255),
+                    g=round(read_float(io_stream) * 255),
+                    b=round(read_float(io_stream) * 255),
+                    a=round(read_float(io_stream) * 255))
 
     @staticmethod
     def parse(xml_color):
-        return RGBA(r=int(parse_float(xml_color, 'R', 0.0) * 255),
-                    g=int(parse_float(xml_color, 'G', 0.0) * 255),
-                    b=int(parse_float(xml_color, 'B', 0.0) * 255),
-                    a=int(parse_float(xml_color, 'A', 0.0) * 255))
+        return RGBA(r=round(parse_float(xml_color, 'R', 0.0) * 255),
+                    g=round(parse_float(xml_color, 'G', 0.0) * 255),
+                    b=round(parse_float(xml_color, 'B', 0.0) * 255),
+                    a=round(parse_float(xml_color, 'A', 0.0) * 255))
 
     @staticmethod
     def size():

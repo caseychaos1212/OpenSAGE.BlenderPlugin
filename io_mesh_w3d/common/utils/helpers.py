@@ -11,7 +11,7 @@ from .animation_compat import iter_animation_data_fcurves
 
 def make_transform_matrix(loc, rot):
     mat_loc = Matrix.Translation(loc)
-    mat_rot = Quaternion(rot).to_matrix().to_4x4()
+    mat_rot = Quaternion(rot).normalized().to_matrix().to_4x4()
     return mat_loc @ mat_rot
 
 def get_objects(type, object_list=None):  # MESH, ARMATURE
@@ -131,14 +131,18 @@ def link_object_to_active_scene(obj, coll):
 
 def rig_object(obj, hierarchy, rig, sub_object):
     obj.parent = rig
-    obj.parent_type = 'ARMATURE'
-    if sub_object.bone_index <= 0:
+    obj.parent_type = 'OBJECT'
+    if rig is None or hierarchy is None or sub_object is None:
+        return
+    if not 0 <= sub_object.bone_index < len(hierarchy.pivots):
         return
 
     pivot = hierarchy.pivots[sub_object.bone_index]
-
-    obj.parent_bone = pivot.name
-    obj.parent_type = 'BONE'
+    if pivot.name in rig.data.bones:
+        obj.parent_bone = pivot.name
+        obj.parent_type = 'BONE'
+        # Blender parents to the bone tip; file attachments use the pivot origin.
+        obj.matrix_parent_inverse = Matrix.Translation((0, -rig.data.bones[pivot.name].length, 0))
 
 
 def create_uvlayer(context, mesh, b_mesh, tris, mat_pass):

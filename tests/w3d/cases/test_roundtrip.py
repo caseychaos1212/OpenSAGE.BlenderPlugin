@@ -59,7 +59,8 @@ class TestRoundtripW3D(TestCase):
         self.assertTrue(hierarchy_name.upper() in bpy.data.objects)
         self.assertTrue(hierarchy_name.upper() in bpy.data.armatures)
         amt = bpy.data.armatures[hierarchy_name.upper()]
-        self.assertEqual(7, len(amt.bones))
+        # The fork retains ROOTTRANSFORM as an explicit Blender bone.
+        self.assertEqual(8, len(amt.bones))
 
         self.assertTrue('sword' in bpy.data.objects)
         self.assertTrue('soldier' in bpy.data.objects)
@@ -108,7 +109,8 @@ class TestRoundtripW3D(TestCase):
         self.assertTrue(hierarchy_name.upper() in bpy.data.objects)
         self.assertTrue(hierarchy_name.upper() in bpy.data.armatures)
         amt = bpy.data.armatures[hierarchy_name.upper()]
-        self.assertEqual(7, len(amt.bones))
+        # The fork retains ROOTTRANSFORM as an explicit Blender bone.
+        self.assertEqual(8, len(amt.bones))
 
         self.assertTrue('sword' in bpy.data.objects)
         self.assertTrue('soldier' in bpy.data.objects)
@@ -141,7 +143,8 @@ class TestRoundtripW3D(TestCase):
         # check created objects
         self.assertTrue('output' in bpy.data.armatures)
         amt = bpy.data.armatures['output']
-        self.assertEqual(7, len(amt.bones))
+        # The fork retains ROOTTRANSFORM as an explicit Blender bone.
+        self.assertEqual(8, len(amt.bones))
 
     def test_hierarchy_name_is_container_name_on_HM_and_not_use_existing_skeleton(self):
         hierarchy_name = 'TestName'
@@ -171,7 +174,8 @@ class TestRoundtripW3D(TestCase):
         # check created objects
         self.assertTrue('output' in bpy.data.armatures)
         amt = bpy.data.armatures['output']
-        self.assertEqual(7, len(amt.bones))
+        # The fork retains ROOTTRANSFORM as an explicit Blender bone.
+        self.assertEqual(8, len(amt.bones))
 
     def test_roundtrip_HAM(self):
         hierarchy_name = 'TestName'
@@ -203,7 +207,8 @@ class TestRoundtripW3D(TestCase):
         # check created objects
         self.assertTrue('output' in bpy.data.armatures)
         amt = bpy.data.armatures['output']
-        self.assertEqual(7, len(amt.bones))
+        # The fork retains ROOTTRANSFORM as an explicit Blender bone.
+        self.assertEqual(8, len(amt.bones))
 
         self.assertTrue('sword' in bpy.data.objects)
         self.assertTrue('soldier' in bpy.data.objects)
@@ -240,7 +245,8 @@ class TestRoundtripW3D(TestCase):
         # check created objects
         self.assertTrue('output' in bpy.data.armatures)
         amt = bpy.data.armatures['output']
-        self.assertEqual(7, len(amt.bones))
+        # The fork retains ROOTTRANSFORM as an explicit Blender bone.
+        self.assertEqual(8, len(amt.bones))
 
         self.assertTrue('sword' in bpy.data.objects)
         self.assertTrue('soldier' in bpy.data.objects)
@@ -274,7 +280,8 @@ class TestRoundtripW3D(TestCase):
         self.assertTrue('output' in bpy.data.objects)
         self.assertTrue('output' in bpy.data.armatures)
         amt = bpy.data.armatures['output']
-        self.assertEqual(7, len(amt.bones))
+        # The fork retains ROOTTRANSFORM as an explicit Blender bone.
+        self.assertEqual(8, len(amt.bones))
 
         self.assertTrue('sword' in bpy.data.objects)
         self.assertTrue('soldier' in bpy.data.objects)

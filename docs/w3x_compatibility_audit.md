@@ -1,5 +1,70 @@
 # W3X / C&C3 compatibility audit
 
+## Fix validation — September 13, 2026
+
+The fixes following merge `01b74f2` pass **405/405 tests** on Blender 5.2.0
+LTS (`fbe6228777e7`): 250 common, 97 W3D, 56 W3X, and two package tests.
+This supersedes the unresolved findings in the historical audit below.
+
+Changes:
+
+- Shader exports bypass the Renegade vertex-material pass bridge. W3X retains
+  both UV sets, alpha-test and texture-count values, C&C3 constant names, and
+  shader technique indices. W3D keeps its vertex-material passes and binary
+  shader constant names. Integer and fractional `EdgeFadeOut` constants retain
+  their source types.
+- The explicit Blender `ROOTTRANSFORM` bone remains available for Renegade
+  attachments and skin weights. Export maps it to the existing file root,
+  preserving pivot counts, parenting, root rest transforms, and hierarchy
+  centers across repeated round-trips. Bone matrices no longer apply the root
+  rest transform twice; longer display bones avoid orientation precision loss.
+  Attachments and collision boxes use the pivot origin regardless of bone length.
+- Root animation export removes the rest offset added for Blender display.
+  W3X keeps its source rotation values and channel ranges. Renegade keeps its
+  rigid rotation baselines and return-to-rest keys. Translation baselines now
+  affect only the relevant axis and never overwrite an existing frame-zero key.
+- Vertex colors are actually written to their material passes. Byte conversion
+  rounds instead of repeatedly truncating XML/binary-float color values.
+- W3X include loading handles shared dependencies and cycles. Loading an
+  animation reuses matching mesh dependencies already in the scene. Blender's
+  automatic object renaming no longer changes source asset identifiers or
+  breaks skin/rigid parenting. Imported LOD screen-size thresholds are retained.
+- The Renegade mesh-to-hierarchical-model override applies only to W3D. Legacy
+  node textures remain available when W3D material stages have not been configured.
+
+Twenty-one new regression tests cover serialized XML and W3D binary output,
+repeated hierarchy/color round-trips, source shader types, root animation,
+root-weighted skinning, multiple W3D material passes/stages, renamed objects,
+and W3X dependencies. Existing tests were updated for intentional fork behavior:
+explicit root bones, return-to-rest keys, and rebuilt collision trees. Rebuilt
+AABB trees are checked for full triangle coverage, valid bounds, and an acyclic
+connected structure; binary structure tests retain their exact comparisons.
+General round-trip fixtures no longer include unrelated invalid attachments;
+the dedicated aggregate/proxy tests remain.
+
+All ten workflows using the supplied C&C3 mod folders complete import, export,
+and reimport. All **42 exported meshes have nonempty UV sets** (the previous 51
+included nine duplicate artillery meshes). Representative pivot counts remain
+12 for the tank, 25 for the minigunner, 12 for the aircraft, and 14 for artillery.
+The artillery model remains at nine meshes when its attack animation is loaded.
+
+A direct source/export animation comparison retains all 11 aircraft, five
+artillery, and four power-plant channels. Maximum scalar error / normalized
+quaternion dot error is approximately `1.2e-7`. Blender still reports redundant
+key-insertion warnings on the aircraft; these comparisons found no missing
+channels or changed sampled values. The extension namespace smoke test passes
+registration, callbacks, material-state restoration, W3D/W3X exports, and
+unregistration.
+
+Evidence under `TestResults/w3x-audit/`: `fixed-results.json`, `fixed-suite.log`,
+`fixed-assets/results.json`, `fixed-assets.log`, `animation-fidelity.json`,
+`animation-fidelity.log`, and `fixed-extension-smoke.log`. The production asset
+files were only read. Validation used Blender 5.2; other CI versions, rendered
+appearance, and the mod's asset compiler/in-game behavior remain unverified.
+No changes have been pushed or installed into the user's Blender preferences.
+
+## Historical audit
+
 Audited September 12, 2026, using installed Blender 5.2.0 LTS, build
 `fbe6228777e7`, in separate factory-startup background processes.
 

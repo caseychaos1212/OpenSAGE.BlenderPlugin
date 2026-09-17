@@ -122,6 +122,11 @@ def create_material_from_vertex_material(name, vert_mat):
     material.vm_args_1 = vert_mat.vm_args_1.replace('\r\n', ', ')
 
     populate_settings_from_material(material)
+    # Textures are connected after this helper returns. Leave a new stage
+    # unconfigured so legacy node textures remain available on export.
+    settings = material.w3d_material_settings
+    settings.passes[0].stage0.property_unset('enabled')
+    settings.passes[0].stage1.property_unset('enabled')
     return material, principled
 
 
@@ -184,6 +189,7 @@ def create_material_from_shader_material(context, name, shader_mat):
             material.bump_uv_scale = prop.value.xy
         elif prop.name == 'EdgeFadeOut':
             material.edge_fade_out = prop.value
+            material['_w3d_edge_fade_type'] = prop.type
         elif prop.name == 'DepthWriteEnable':
             material.depth_write = prop.value
         elif prop.name == 'Sampler_ClampU_ClampV_NoMip_0':

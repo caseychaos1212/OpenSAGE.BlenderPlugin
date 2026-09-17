@@ -314,7 +314,7 @@ class TestUtils(TestCase):
         self.assertEqual(6, applied_blend_mode)
 
     def test_boxes_roundtrip(self):
-        hlod = get_hlod()
+        hlod = get_hlod(attachments=False)
         hlod.lod_arrays[0].sub_objects.append(get_hlod_sub_object(bone=1, name='containerName.WORLDBOX'))
         hierarchy = get_hierarchy()
         meshes = []
@@ -325,7 +325,7 @@ class TestUtils(TestCase):
         self.compare_data([], None, None, boxes)
 
     def test_dazzles_roundtrip(self):
-        hlod = get_hlod(hierarchy_name='containerName')
+        hlod = get_hlod(hierarchy_name='containerName', attachments=False)
         hlod.lod_arrays[0].header.model_count = 3
         hlod.lod_arrays[0].sub_objects = [
             get_hlod_sub_object(bone=1, name='containerName.Backlight'),
@@ -353,7 +353,7 @@ class TestUtils(TestCase):
         hierarchy.pivots = [get_roottransform(), get_hierarchy_pivot(name='ubbarracks', parent=0)]
         hierarchy.header.num_pivots = len(hierarchy.pivots)
 
-        hlod = get_hlod(hierarchy_name='ubbarracks')
+        hlod = get_hlod(hierarchy_name='ubbarracks', attachments=False)
         hlod.lod_arrays[0].sub_objects = [
             get_hlod_sub_object(bone=1, name='containerName.ubbarracks')]
         hlod.lod_arrays[0].header.model_count = len(hlod.lod_arrays[0].sub_objects)
@@ -367,7 +367,7 @@ class TestUtils(TestCase):
     def test_too_many_hierarchies_roundtrip(self):
         hierarchy = get_hierarchy()
         hierarchy2 = get_hierarchy(name='TestHierarchy2')
-        hlod = get_hlod()
+        hlod = get_hlod(attachments=False)
         boxes = [get_collision_box()]
         meshes = [
             get_mesh(name='sword', skin=True),
@@ -388,7 +388,7 @@ class TestUtils(TestCase):
                 'only one armature per scene allowed! Exporting only the first one: TestHierarchy2')
 
     def test_hlod_roundtrip(self):
-        hlod = get_hlod()
+        hlod = get_hlod(attachments=False)
         hlod.aggregate_array = None
         hlod.proxy_array = None
         boxes = [get_collision_box()]
@@ -491,7 +491,7 @@ class TestUtils(TestCase):
             pivot]
         hierarchy.header.num_pivots = len(hierarchy.pivots)
 
-        hlod = get_hlod()
+        hlod = get_hlod(attachments=False)
         hlod.header.hierarchy_name = 'containerName'
         hlod.lod_arrays[0].header.model_count = 1
         hlod.lod_arrays[0].sub_objects = [
@@ -528,7 +528,7 @@ class TestUtils(TestCase):
             pivot]
         hierarchy.header.num_pivots = len(hierarchy.pivots)
 
-        hlod = get_hlod()
+        hlod = get_hlod(attachments=False)
         hlod.header.hierarchy_name = 'containerName'
         hlod.lod_arrays[0].header.model_count = 1
         hlod.lod_arrays[0].sub_objects = [
@@ -581,7 +581,7 @@ class TestUtils(TestCase):
         self.compare_data(meshes, hlod, hierarchy)
 
     def test_PICK_mesh_roundtrip(self):
-        hlod = get_hlod()
+        hlod = get_hlod(attachments=False)
         boxes = [get_collision_box()]
         hierarchy = get_hierarchy()
         meshes = [
@@ -596,7 +596,7 @@ class TestUtils(TestCase):
         self.compare_data(meshes, hlod, hierarchy, boxes)
 
     def test_mesh_attributes_roundtrip(self):
-        hlod = get_hlod()
+        hlod = get_hlod(attachments=False)
         hierarchy = get_hierarchy()
         meshes = [
             get_mesh(name='sword', skin=True),
@@ -609,7 +609,7 @@ class TestUtils(TestCase):
         self.compare_data(meshes)
 
     def test_mesh_is_child_of_mesh_roundtrip(self):
-        hlod = get_hlod()
+        hlod = get_hlod(attachments=False)
         hlod.header.hierarchy_name = 'containerName'
         hlod.lod_arrays[0].sub_objects = [
             get_hlod_sub_object(bone=1, name='containerName.parent'),
@@ -634,7 +634,7 @@ class TestUtils(TestCase):
         self.compare_data(meshes, hlod, hierarchy)
 
     def test_meshes_roundtrip(self):
-        hlod = get_hlod()
+        hlod = get_hlod(attachments=False)
         boxes = [get_collision_box()]
         hierarchy = get_hierarchy()
         meshes = [
@@ -654,7 +654,7 @@ class TestUtils(TestCase):
         self.compare_data(meshes)
 
     def test_mesh_too_many_vertex_groups_roundtrip(self):
-        hlod = get_hlod()
+        hlod = get_hlod(attachments=False)
         boxes = [get_collision_box()]
         hierarchy = get_hierarchy()
         meshes = [get_mesh(name='sword', skin=True)]
@@ -668,7 +668,7 @@ class TestUtils(TestCase):
         self.compare_data([])
 
     def test_mesh_with_pivot_roundtrip(self):
-        hlod = get_hlod()
+        hlod = get_hlod(attachments=False)
         hlod.header.hierarchy_name = 'containerName'
         hlod.lod_arrays[0].sub_objects = [
             get_hlod_sub_object(bone=1, name='containerName.sword')]
@@ -687,7 +687,7 @@ class TestUtils(TestCase):
         self.compare_data([mesh], hlod, hierarchy)
 
     def test_mesh_with_parent_bone_roundtrip(self):
-        hlod = get_hlod()
+        hlod = get_hlod(attachments=False)
         hlod.header.hierarchy_name = 'containerName'
         hlod.lod_arrays[0].sub_objects = [
             get_hlod_sub_object(bone=2, name='containerName.sword')]
@@ -707,7 +707,7 @@ class TestUtils(TestCase):
         self.compare_data([mesh], hlod, hierarchy)
 
     def test_mesh_skin_roundtrip(self):
-        hlod = get_hlod()
+        hlod = get_hlod(attachments=False)
         hlod.header.hierarchy_name = 'containerName'
         hlod.lod_arrays[0].sub_objects = [
             get_hlod_sub_object(bone=0, name='containerName.sword')]
@@ -815,7 +815,7 @@ class TestUtils(TestCase):
 
     def test_animation_roundtrip(self):
         animation = get_animation()
-        hlod = get_hlod()
+        hlod = get_hlod(attachments=False)
         boxes = [get_collision_box()]
         hierarchy = get_hierarchy()
         hierarchy.pivot_fixups = []
@@ -847,7 +847,7 @@ class TestUtils(TestCase):
             motion_ad8=False,
             random_interpolation=False)
         boxes = [get_collision_box()]
-        hlod = get_hlod()
+        hlod = get_hlod(attachments=False)
         hierarchy = get_hierarchy()
         hierarchy.pivot_fixups = []
         meshes = [
@@ -859,6 +859,11 @@ class TestUtils(TestCase):
         create_data(self, meshes, hlod, hierarchy,
                     boxes, None, compressed_animation)
 
+        # Renegade imports return to rest immediately after a partial channel.
+        for channel in compressed_animation.time_coded_channels:
+            value = Quaternion() if channel.type == CHANNEL_Q else 0.0
+            channel.time_codes.append(TimeCodedDatum(time_code=5, value=value))
+            channel.num_time_codes += 1
         self.compare_data([], None, None, [], None, compressed_animation)
 
     def test_roundtrip_only_needed_keyframes(self):
@@ -909,12 +914,18 @@ class TestUtils(TestCase):
             type=1,
             time_codes=time_codes)
 
+        # Keep the fork's return-to-rest keys, while redundant source keys
+        # remain optimized away by Blender.
+        channel.time_codes.append(TimeCodedDatum(time_code=5, value=0.0))
+        channel.num_time_codes += 1
+        channel_q.time_codes.append(TimeCodedDatum(time_code=7, value=Quaternion()))
+        channel_q.num_time_codes += 1
         animation.time_coded_channels = [channel, channel_q]
 
         self.compare_data([], None, None, [], None, animation)
 
     def test_bone_is_created_if_referenced_by_subObject_but_also_child_bones_roundtrip(self):
-        hlod = get_hlod()
+        hlod = get_hlod(attachments=False)
         hierarchy = get_hierarchy()
         hierarchy.pivot_fixups = []
         hierarchy.pivots = [
@@ -941,7 +952,7 @@ class TestUtils(TestCase):
 
     def test_bone_is_created_if_referenced_by_subObject_but_names_dont_match(
             self):
-        hlod = get_hlod()
+        hlod = get_hlod(attachments=False)
         hlod.lod_arrays[0].sub_objects = [get_hlod_sub_object(bone=1, name='containerName.object')]
         hlod.lod_arrays[0].header.model_count = 1
 
@@ -991,7 +1002,7 @@ class TestUtils(TestCase):
                 self, actual_hiera, rig, container_name)
             self.assertEqual(len(meshes), len(actual_meshes))
             for i, mesh in enumerate(meshes):
-                compare_meshes(self, mesh, actual_meshes[i])
+                compare_meshes(self, mesh, actual_meshes[i], rebuilt_aabb=True)
 
         if boxes:
             actual_boxes = retrieve_boxes(container_name)

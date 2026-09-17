@@ -302,12 +302,15 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
                     context.warning(f'mesh \'{mesh_object.name}\' uses a invalid/empty material!')
                     continue
 
-                settings = getattr(material, 'w3d_material_settings', None)
+                # Renegade vertex-material passes do not describe shader materials.
+                shader_material = context.file_format == 'W3X' or (
+                    material.material_type == 'SHADER_MATERIAL' and not force_vertex_materials)
+                settings = None if shader_material else getattr(material, 'w3d_material_settings', None)
                 pass_configs = list(settings.passes) if settings and settings.passes else [None]
                 original_state = snapshot_material_state(material) if settings and settings.passes else None
 
                 try:
-                    if not settings or not settings.passes:
+                    if not shader_material and (not settings or not settings.passes):
                         apply_material_settings_to_legacy(material)
 
                     for pass_config in pass_configs:
@@ -322,8 +325,7 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
 
                         custom_stage = False
 
-                        if context.file_format == 'W3X' or (
-                                material.material_type == 'SHADER_MATERIAL' and not force_vertex_materials):
+                        if shader_material:
                             mat_pass.shader_material_ids = [len(mesh_struct.shader_materials)]
                             if pass_config is None and i < len(tx_stages):
                                 mat_pass.tx_coords = tx_stages[i].tx_coords[0]
@@ -331,7 +333,8 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
                                     mat_pass.tx_coords_2 = tx_stages[i + 1].tx_coords[0]
 
                             mesh_struct.shader_materials.append(
-                                retrieve_shader_material(context, material, principled))
+                                retrieve_shader_material(context, material, principled,
+                                                         w3x=context.file_format == 'W3X'))
 
                         else:
                             shader = retrieve_shader(material)
@@ -342,7 +345,9 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
                             mesh_struct.vert_materials.append(
                                 retrieve_vertex_material(material, principled, settings, pass_config))
 
-                            if pass_config is None:
+                            if pass_config is None or (
+                                    pass_config.stage0.texture is None
+                                    and not pass_config.stage0.is_property_set('enabled')):
                                 base_col_tex = principled.base_color_texture
                                 if base_col_tex is not None and base_col_tex.image is not None:
                                     info = TextureInfo()
@@ -358,7 +363,9 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
                                     shader.texturing = 1
 
                                     if i < len(tx_stages):
-                                        mat_pass.tx_stages.append(tx_stages[i])
+                                        mat_pass.tx_stages.append(TextureStage(
+                                            tx_ids=[[len(mesh_struct.textures) - 1]],
+                                            tx_coords=tx_stages[i].tx_coords))
 
                         if pass_config is not None:
                             custom_stage |= add_stage_from_settings(
@@ -387,24 +394,31 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
                 mesh_struct.aabbtree = build_aabb_tree(mesh_struct)
 
             for layer in get_vertex_color_layers(mesh):
-                if '_' in layer.name:
-                    index = int(layer.name.split('_')[-1])
+                if '_' in layer.name and layer.name.rsplit('_', 1)[-1].isdigit():
+                    index = int(layer.name.rsplit('_', 1)[-1])
                 else:
                     index = 0
                 if 'DCG' in layer.name:
-                    target = mesh_struct.material_passes[index].dcg
+                    attribute = 'dcg'
                 elif 'DIG' in layer.name:
-                    target = mesh_struct.material_passes[index].dig
+                    attribute = 'dig'
                 elif 'SCG' in layer.name:
-                    target = mesh_struct.material_passes[index].scg
+                    attribute = 'scg'
                 else:
                     context.warning(f'vertex color layer name \'{layer.name}\' is not one of [DCG, DIG, SCG]')
                     continue
 
-                target = [RGBA] * len(mesh.vertices)
+                if index >= len(mesh_struct.material_passes):
+                    context.warning(f'vertex color layer {layer.name!r} has no material pass')
+                    continue
+                target = [RGBA() for _ in mesh.vertices]
+                setattr(mesh_struct.material_passes[index], attribute, target)
 
                 for i, loop in enumerate(mesh.loops):
-                    target[loop.vertex_index] = RGBA(layer.data[i].color)
+                    color = layer.data[i].color
+                    target[loop.vertex_index] = RGBA(
+                        r=round(color[0] * 255), g=round(color[1] * 255),
+                        b=round(color[2] * 255), a=round(color[3] * 255))
 
             header.vert_channel_flags = VERTEX_CHANNEL_LOCATION | VERTEX_CHANNEL_NORMAL
 

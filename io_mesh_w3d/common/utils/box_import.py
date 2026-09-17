@@ -49,8 +49,5 @@ def create_box(box, coll):
 def rig_box(box, hierarchy, rig, sub_object):
     if sub_object.bone_index == 0:
         return
-    pivot = hierarchy.pivots[sub_object.bone_index]
     box_object = bpy.data.objects[box.name()]
-    box_object.parent = rig
-    box_object.parent_bone = pivot.name
-    box_object.parent_type = 'BONE'
+    rig_object(box_object, hierarchy, rig, sub_object)

@@ -92,25 +92,26 @@ def _set_constant_keyframe(owner, prop, index=None):
                 break
 
 
-def _insert_translation_baseline(bone):
+def _insert_translation_baseline(bone, index):
     prev_loc = bone.location.copy()
     bone.location = Vector((0.0, 0.0, 0.0))
-    for axis in range(3):
-        bone.keyframe_insert(data_path='location', index=axis, frame=0, options=creation_options)
-        _set_constant_keyframe(bone, 'location', axis)
+    bone.keyframe_insert(data_path='location', index=index, frame=0, options=creation_options)
+    _set_constant_keyframe(bone, 'location', index)
     bone.location = prev_loc
 
 
-def set_translation(bone, index, frame, value, rest_location=None, rest_rotation=None, pivot_id=None):
+def set_translation(bone, index, frame, value, rest_location=None, rest_rotation=None, pivot_id=None, insert_baseline=True):
     if isinstance(bone, bpy.types.Object):
         base = rest_location[index] if rest_location is not None else 0.0
         bone.location[index] = base + value
         bone.keyframe_insert(data_path='location', index=index, frame=frame, options=creation_options)
         return
 
-    if pivot_id is not None and frame > 0 and pivot_id not in TRANSLATION_BASELINES:
-        TRANSLATION_BASELINES.add(pivot_id)
-        _insert_translation_baseline(bone)
+    key = (pivot_id, index)
+    if pivot_id is not None and key not in TRANSLATION_BASELINES:
+        TRANSLATION_BASELINES.add(key)
+        if insert_baseline and frame > 0:
+            _insert_translation_baseline(bone, index)
 
     bone.location[index] = value
     bone.keyframe_insert(data_path='location', index=index, frame=frame, options=creation_options)
@@ -193,7 +194,8 @@ def set_keyframe(context, bone, channel, frame, value, rest_location=None, rest_
     if is_visibility(channel):
         set_visibility(context, bone, frame, value)
     elif is_translation(channel):
-        set_translation(bone, channel.type, frame, value, rest_location, rest_rotation, channel.pivot)
+        set_translation(bone, channel.type, frame, value, rest_location, rest_rotation, channel.pivot,
+                        insert_baseline=context.file_format != 'W3X')
     else:
         set_rotation(bone, frame, value, rest_rotation)
 
@@ -209,7 +211,7 @@ def _get_channel_end_frame(channel):
 
 
 def _insert_rest_key(context, bone, channel, rest_location, rest_rotation, rotation_baselines, num_frames):
-    if num_frames is None:
+    if num_frames is None or context.file_format == 'W3X':
         return
     end_frame = _get_channel_end_frame(channel)
     if end_frame is None:
@@ -315,7 +317,7 @@ def create_animation(context, rig, animation, hierarchy):
     rig_id = id(rig) if rig is not None else None
     rotation_baselines = {
         'values': BASELINE_ROTATIONS.setdefault(rig_id, {}),
-        'rigid_bones': _collect_rigid_bone_names(rig),
+        'rigid_bones': _collect_rigid_bone_names(rig) if context.file_format == 'W3D' else set(),
     }
     num_frames = animation.header.num_frames
 

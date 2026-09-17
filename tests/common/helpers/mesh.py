@@ -278,7 +278,7 @@ def get_mesh_empty():
     return mesh
 
 
-def compare_meshes(self, expected, actual):
+def compare_meshes(self, expected, actual, rebuilt_aabb=False):
     compare_mesh_headers(self, expected.header, actual.header)
 
     is_skin = expected.is_skin()
@@ -299,7 +299,9 @@ def compare_meshes(self, expected, actual):
     for i, expect in enumerate(expected.shade_ids):
         self.assertAlmostEqual(expect, actual.shade_ids[i])
 
-    if expected.aabbtree is not None:
+    if rebuilt_aabb:
+        assert_collision_tree_covers_mesh(self, actual)
+    elif expected.aabbtree is not None:
         if actual.aabbtree is not None:
             compare_aabbtrees(self, expected.aabbtree, actual.aabbtree)
 
@@ -342,3 +344,39 @@ def compare_meshes(self, expected, actual):
         compare_prelits(self, expected.prelit_lightmap_multi_pass, actual.prelit_lightmap_multi_pass)
     if expected.prelit_lightmap_multi_texture is not None:
         compare_prelits(self, expected.prelit_lightmap_multi_texture, actual.prelit_lightmap_multi_texture)
+
+
+def assert_collision_tree_covers_mesh(self, mesh):
+    # Export deliberately rebuilds the tree: validate geometry coverage instead
+    # of comparing against the unrelated 33-node binary-format fixture.
+    tree = mesh.aabbtree
+    self.assertIsNotNone(tree)
+    self.assertEqual(len(tree.nodes), tree.header.node_count)
+    self.assertEqual(len(mesh.triangles), tree.header.poly_count)
+    self.assertEqual(list(range(len(mesh.triangles))), sorted(tree.poly_indices))
+    visited = set()
+    covered = []
+
+    def visit(index):
+        self.assertNotIn(index, visited)
+        self.assertTrue(0 <= index < len(tree.nodes))
+        visited.add(index)
+        node = tree.nodes[index]
+        if node.polys is not None:
+            indices = tree.poly_indices[node.polys.begin:node.polys.begin + node.polys.count]
+            self.assertEqual(node.polys.count, len(indices))
+            covered.extend(indices)
+        else:
+            self.assertIsNotNone(node.children)
+            indices = visit(node.children.front) + visit(node.children.back)
+        for triangle_index in indices:
+            for vertex_index in mesh.triangles[triangle_index].vert_ids:
+                vertex = mesh.verts[vertex_index]
+                for axis in range(3):
+                    self.assertLessEqual(node.min[axis] - 0.0001, vertex[axis])
+                    self.assertGreaterEqual(node.max[axis] + 0.0001, vertex[axis])
+        return indices
+
+    visit(0)
+    self.assertEqual(len(tree.nodes), len(visited))
+    self.assertEqual(list(range(len(mesh.triangles))), sorted(covered))

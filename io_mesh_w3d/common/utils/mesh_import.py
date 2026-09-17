@@ -36,19 +36,15 @@ def create_mesh(context, mesh_struct, coll, hierarchy=None, sub_object=None):
     mesh.two_sided = mesh_struct.two_sided()
 
     mesh_ob = bpy.data.objects.new(actual_mesh_name, mesh)
-    mesh_struct.header.mesh_name = actual_mesh_name
+
+    if context.file_format == 'W3X' and hasattr(mesh_struct, '_w3x_source'):
+        mesh_ob['_w3x_source'] = mesh_struct._w3x_source
+        mesh_ob['_w3x_id'] = mesh_struct.name()
 
     mesh_ob.use_empty_image_alpha = True
     populate_object_settings_from_mesh(mesh_ob, mesh_struct)
 
     link_object_to_active_scene(mesh_ob, coll)
-
-    if (not mesh_struct.is_skin()) and hierarchy is not None and sub_object is not None:
-        bone_index = getattr(sub_object, 'bone_index', -1)
-        if 0 <= bone_index < len(hierarchy.pivots):
-            rest_matrix = pivot_world_matrix(hierarchy, bone_index)
-            if rest_matrix is not None:
-                mesh_ob.matrix_world = rest_matrix
 
     if (not mesh_struct.is_skin()) and hierarchy is not None and sub_object is not None:
         bone_index = getattr(sub_object, 'bone_index', -1)
@@ -131,17 +127,17 @@ def create_mesh(context, mesh_struct, coll, hierarchy=None, sub_object=None):
     if mesh.validate(verbose=True):
         context.info(f'mesh \'{actual_mesh_name}\' has been fixed')
 
-    return mesh.name
+    return mesh_ob.name
 
 
-def rig_mesh(mesh_struct, hierarchy, rig, sub_object=None):
-    mesh_ob = bpy.data.objects[mesh_struct.name()]
+def rig_mesh(mesh_struct, hierarchy, rig, sub_object=None, object_name=None):
+    mesh_ob = bpy.data.objects[object_name or mesh_struct.name()]
 
     if hierarchy is None or not hierarchy.pivots:
         return
 
     if mesh_struct.is_skin():
-        mesh = bpy.data.meshes[mesh_ob.name]
+        mesh = mesh_ob.data
         normals = mesh_struct.normals.copy()
         for i, vert_inf in enumerate(mesh_struct.vert_infs):
             weight = vert_inf.bone_inf

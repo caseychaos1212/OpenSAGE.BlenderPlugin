@@ -90,7 +90,10 @@ class TestImportUtilsW3D(TestCase):
         expected_frames = [0, 4]
         if bpy.app.version >= (4, 2, 0):
             expected_frames = [0]
-        expected = [3.0, 3.0]
+        expected = [3.0] * len(expected_frames)
+        # Renegade's partial channel returns to rest at frame 5.
+        expected_frames.append(5)
+        expected.append(0.0)
 
         self.filepath = self.outpath() + 'output'
         create_data(self, meshes, hlod, hierarchy, [], None, animation)
