@@ -1145,11 +1145,11 @@ class MESH_PROPERTIES_PANEL_PT_w3d(Panel):
 
         export_box = layout.box()
         export_box.label(text='Export Options')
+        export_box.prop(settings, 'export_object')
         export_box.prop(settings, 'export_transform')
         export_box.prop(settings, 'export_geometry')
-        if hlod_role == 'LOD':
-            export_box.prop(settings, 'geometry_type')
-        else:
+        export_box.prop(settings, 'geometry_type')
+        if hlod_role != 'LOD':
             export_box.label(text='This mesh exports as an HLOD attachment only.', icon='INFO')
             export_box.prop(settings, 'hlod_identifier')
         export_box.prop(settings, 'static_sort_level')
@@ -1211,6 +1211,7 @@ class OBJECT_PROPERTIES_PANEL_PT_w3d(Panel):
 
         layout = self.layout
         layout.use_property_split = True
+        layout.prop(settings, 'export_object')
         layout.prop(settings, 'hlod_role')
         layout.prop(settings, 'export_transform')
         layout.prop(settings, 'export_geometry')

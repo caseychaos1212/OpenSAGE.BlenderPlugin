@@ -45,20 +45,23 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
     build_aabbtree = export_options.get('build_new_aabtree', True) or force_full
     seen_mesh_data = set()
 
+    mesh_objects = [
+        obj for obj in get_objects('MESH')
+        if obj.data.object_type == 'MESH'
+        and not is_hlod_attachment(obj)
+        and should_export_geometry(obj)
+    ]
+    if not mesh_objects:
+        return mesh_structs, used_textures
+
     naming_error = False
     bone_names = [bone.name for bone in rig.pose.bones] if rig is not None else []
 
     switch_to_pose(rig, 'REST')
 
-    depsgraph = bpy.context.evaluated_depsgraph_get()
+    depsgraph = bpy.context.evaluated_depsgraph_get() if apply_modifiers else None
 
-    for mesh_object in get_objects('MESH'):
-        if mesh_object.data.object_type != 'MESH':
-            continue
-        if is_hlod_attachment(mesh_object):
-            continue
-        if not should_export_geometry(mesh_object):
-            continue
+    for mesh_object in mesh_objects:
 
         source_object = mesh_object
 

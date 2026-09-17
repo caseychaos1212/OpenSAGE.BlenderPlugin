@@ -4,7 +4,7 @@
 from mathutils import Vector
 from ...common.utils.helpers import *
 from ...common.structs.hierarchy import *
-from ...common.utils.object_settings_bridge import should_export_transform
+from ...common.utils.object_settings_bridge import should_export_object, should_export_transform
 
 
 pick_plane_names = ['PICK']
@@ -19,7 +19,7 @@ def retrieve_hierarchy(context, container_name):
         pivots=[root])
 
     rig = None
-    rigs = get_objects('ARMATURE')
+    rigs = [obj for obj in get_objects('ARMATURE') if should_export_object(obj)]
 
     pivot_id_dict = dict()
 
@@ -90,6 +90,8 @@ def process_bone(bone, pivot_id_dict, hierarchy):
 
 
 def process_mesh(context, mesh, hierarchy, pivot_id_dict):
+    if not should_export_transform(mesh):
+        return
     if mesh.vertex_groups \
             or mesh.data.object_type == 'BOX' \
             or mesh.data.object_type == 'DAZZLE' \
@@ -102,13 +104,17 @@ def process_mesh(context, mesh, hierarchy, pivot_id_dict):
         matrix = mesh.matrix_local
 
         if mesh.parent is not None and mesh.parent.type == 'MESH':
-            context.warning(f'mesh \'{mesh.name}\' did have an object instead of a bone as parent!')
-            if mesh.parent.name not in pivot_id_dict.keys():
-                process_mesh(context, mesh.parent, hierarchy, pivot_id_dict)
-                return
+            if not should_export_transform(mesh.parent):
+                # Keep the child in place without reintroducing an excluded helper pivot.
+                matrix = mesh.matrix_world
+            else:
+                context.warning(f'mesh \'{mesh.name}\' did have an object instead of a bone as parent!')
+                if mesh.parent.name not in pivot_id_dict.keys():
+                    process_mesh(context, mesh.parent, hierarchy, pivot_id_dict)
+                    return
 
-            pivot.parent_id = pivot_id_dict[mesh.parent.name]
-            matrix = mesh.parent.matrix_local.inverted() @ matrix
+                pivot.parent_id = pivot_id_dict[mesh.parent.name]
+                matrix = mesh.parent.matrix_local.inverted() @ matrix
 
         if mesh.name in pivot_id_dict.keys():
             return

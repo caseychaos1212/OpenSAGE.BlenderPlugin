@@ -10,6 +10,7 @@ from ...common.utils.object_settings_bridge import (
     get_hlod_role,
     get_screen_size,
     should_export_geometry,
+    should_export_object,
 )
 
 
@@ -68,7 +69,7 @@ def create_lod_array(meshes, hierarchy, container_name, lod_arrays):
 def create_attachment_array(role, hierarchy, objects):
     attachments = [
         obj for obj in objects
-        if should_export_geometry(obj) and get_hlod_role(obj) == role
+        if should_export_object(obj) and get_hlod_role(obj) == role
     ]
     if not attachments:
         return None

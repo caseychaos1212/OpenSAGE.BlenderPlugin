@@ -36,6 +36,21 @@ Enable the new workflow per scene: open the Scene properties sidebar, expand the
 
 NOTE: When importing weapon animations import the base mesh first, then import the animation with "Keep Rigid meshes static".
 
+### Aggregates and helper objects
+
+Set **HLOD Role** to **Aggregate** (in Object Properties > W3D Object), or set
+**Geometry Type** to **Aggregate** in the mesh's W3D Properties, to export a building
+reference without processing or writing its mesh geometry. Aggregate and Proxy
+references are included even when **Export Geometry** is off, including scenes
+containing only attachments. Use Hierarchical Model or Terrain export (or enable
+the Renegade workflow) to write the HLOD data.
+
+Turn off **Export Object** to keep a cookie cutter or other helper in the blend file
+while omitting its geometry, transform, and attachment from W3D/W3X export. This
+also keeps long helper names out of export name validation. The setting applies
+to the individual object; its children retain their own export settings. Viewport
+visibility and the W3D **Hide** flag remain separate from export inclusion.
+
 ## Note
 
 The plugin is still in beta and the behaviour may change between releases. Also bugs might still occur, which we'll try to fix as soon as possible. This fork is for W3D engine games and SAGE support may be and likely is broken. Do not expect support for SAGE content from the OpenSAGE community from this fork.

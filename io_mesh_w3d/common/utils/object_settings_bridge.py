@@ -131,7 +131,14 @@ def get_hlod_identifier(obj):
     return name
 
 
+def should_export_object(obj):
+    settings = get_object_settings(obj)
+    return settings is None or getattr(settings, 'export_object', True)
+
+
 def should_export_geometry(obj):
+    if not should_export_object(obj):
+        return False
     settings = get_object_settings(obj)
     if settings is None:
         return True
@@ -139,6 +146,8 @@ def should_export_geometry(obj):
 
 
 def should_export_transform(obj):
+    if not should_export_object(obj):
+        return False
     settings = get_object_settings(obj)
     if settings is None:
         return True

@@ -597,8 +597,15 @@ class W3DMaterialSettings(PropertyGroup):
 
 
 class W3DObjectSettings(PropertyGroup):
+    export_object: BoolProperty(
+        name='Export Object',
+        description='Include this object in W3D/W3X export. Disable to omit its geometry, transform, and HLOD attachment',
+        default=True)
     export_transform: BoolProperty(name='Export Transform', default=True)
-    export_geometry: BoolProperty(name='Export Geometry', default=True)
+    export_geometry: BoolProperty(
+        name='Export Geometry',
+        description='Export mesh, collision box, or dazzle data. Aggregate and Proxy attachments do not need geometry',
+        default=True)
     hlod_role: EnumProperty(
         name='HLOD Role',
         description='Choose whether this object exports as regular geometry, an aggregate attachment, or a proxy attachment',
