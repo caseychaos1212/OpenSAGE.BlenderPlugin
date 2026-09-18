@@ -2,9 +2,10 @@
 # Written by Stephan Vedder and Michael Schnabel
 
 from mathutils import Vector, Quaternion
+from ...export_status import report_export_progress
 from ...common.utils.helpers import *
 from ...common.structs.hierarchy import *
-from ...common.utils.object_settings_bridge import should_export_object, should_export_transform
+from ...common.utils.object_settings_bridge import get_hlod_role, should_export_object, should_export_transform
 
 
 pick_plane_names = ['PICK']
@@ -49,7 +50,9 @@ def retrieve_hierarchy(context, container_name):
         hierarchy.header.name = rig.data.name
         hierarchy.header.center_pos = Vector(rig.get('_w3d_center', (0, 0, 0))) if root_name else rig.location.copy()
 
-        for bone in rig.pose.bones:
+        for index, bone in enumerate(rig.pose.bones):
+            report_export_progress(context, 'Building bone hierarchy', object_name=bone.name,
+                                   current=index, total=len(rig.pose.bones), unit='Bones')
             process_bone(bone, pivot_id_dict, hierarchy)
 
         switch_to_pose(rig, 'POSE')
@@ -60,13 +63,41 @@ def retrieve_hierarchy(context, container_name):
     if not terrain_mode:
         meshes = get_objects('MESH')
 
-        for mesh in meshes:
+        for index, mesh in enumerate(meshes):
+            report_export_progress(context, 'Building object hierarchy', object_name=mesh.name,
+                                   current=index, total=len(meshes), unit='Objects')
             if not should_export_transform(mesh):
                 continue
             process_mesh(context, mesh, hierarchy, pivot_id_dict)
 
+    _shorten_proxy_pivot_names(context, hierarchy)
     hierarchy.header.num_pivots = len(hierarchy.pivots)
     return hierarchy, rig
+
+
+def _shorten_proxy_pivot_names(context, hierarchy):
+    """Fit generated proxy pivots in W3D without renaming Blender objects/bones."""
+    if context.file_format != 'W3D':
+        return
+    proxies = {obj.name for obj in get_objects('MESH') if get_hlod_role(obj) == 'PROXY'}
+    # Reserve every existing name before assigning new ones. The engine compares
+    # bone names without regard to case, and each instance needs its own pivot.
+    used_names = {pivot.name.casefold() for pivot in hierarchy.pivots}
+    limit = STRING_LENGTH - 1  # Keep the terminating NUL in the 16-byte field.
+    for pivot in hierarchy.pivots:
+        source_name = getattr(pivot, '_source_object_name', None)
+        if source_name not in proxies or len(pivot.name) <= limit:
+            continue
+        stem = source_name.split('~', 1)[0].strip() or 'proxy'
+        name = stem[:limit]
+        suffix = 0
+        while name.casefold() in used_names:
+            suffix += 1
+            ending = '_' + str(suffix)
+            name = stem[:limit - len(ending)] + ending
+        used_names.add(name.casefold())
+        pivot.name = name
+        context.info(f"Proxy '{source_name}' uses export pivot '{name}'.")
 
 
 def process_bone(bone, pivot_id_dict, hierarchy):
@@ -111,6 +142,9 @@ def process_mesh(context, mesh, hierarchy, pivot_id_dict):
 
     if not mesh.parent_type == 'BONE':
         pivot = HierarchyPivot(name=mesh.name, parent_id=0)
+        # Export-only identity survives name shortening; HLOD connections must
+        # resolve to the original instance rather than its shortened label.
+        pivot._source_object_name = mesh.name
         matrix = mesh.matrix_local
 
         if mesh.parent is not None and mesh.parent.type == 'MESH':

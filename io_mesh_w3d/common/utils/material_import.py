@@ -7,6 +7,7 @@ from bpy_extras import node_shader_utils
 from ...common.utils.helpers import *
 from ...w3d.structs.mesh_structs.vertex_material import *
 from ...common.utils.material_settings_bridge import populate_settings_from_material, apply_pass_to_material
+from ...common.utils.material_preview import create_pass_preview
 
 
 ##########################################################################
@@ -63,72 +64,6 @@ def _populate_imported_stage(context, config, texture):
         config.no_lod = bool(info.attributes & 0x04)
         config.clamp_u = bool(info.attributes & 0x08)
         config.clamp_v = bool(info.attributes & 0x10)
-
-
-def _create_pass_preview(material, mesh):
-    # Approximate common terrain detail/alpha passes. Keep every texture node
-    # available even for engine-specific mapping modes Blender cannot reproduce.
-    tree = material.node_tree
-    base_color = base_alpha = None
-    for pass_index, config in enumerate(material.w3d_material_settings.passes):
-        textures = []
-        for stage_index in range(2):
-            stage = getattr(config, f'stage{stage_index}')
-            if not stage.enabled or stage.texture is None:
-                textures.append(None)
-                continue
-            node = tree.nodes.new('ShaderNodeTexImage')
-            node.image = stage.texture
-            node.label = f'Pass {pass_index + 1}, Stage {stage_index}'
-            node.location = (-900, -pass_index * 600 - stage_index * 260)
-            channel = getattr(config, f'uv_channel_stage{stage_index}') - 1
-            if channel < len(mesh.uv_layers):
-                uv = tree.nodes.new('ShaderNodeUVMap')
-                uv.uv_map = mesh.uv_layers[channel].name
-                uv.location = (-1150, node.location.y)
-                tree.links.new(uv.outputs['UV'], node.inputs['Vector'])
-            textures.append(node)
-        if textures[0] is None:
-            continue
-        color = textures[0].outputs['Color']
-        alpha = textures[0].outputs['Alpha']
-        detail = textures[1]
-        if detail is not None:
-            if config.shader.detail_color == '1':
-                color = detail.outputs['Color']
-            elif config.shader.detail_color in ('2', '3', '4', '5'):
-                mix = tree.nodes.new('ShaderNodeMixRGB')
-                mix.blend_type = {'2': 'MULTIPLY', '3': 'SCREEN', '4': 'ADD', '5': 'SUBTRACT'}[
-                    config.shader.detail_color]
-                mix.inputs[0].default_value = 1.0
-                mix.location = (-550, -pass_index * 600)
-                tree.links.new(color, mix.inputs[1])
-                tree.links.new(detail.outputs['Color'], mix.inputs[2])
-                color = mix.outputs[0]
-            if config.shader.detail_alpha == '1':
-                alpha = detail.outputs['Alpha']
-            elif config.shader.detail_alpha == '2':
-                multiply = tree.nodes.new('ShaderNodeMath')
-                multiply.operation = 'MULTIPLY'
-                multiply.location = (-550, -pass_index * 600 - 180)
-                tree.links.new(alpha, multiply.inputs[0])
-                tree.links.new(detail.outputs['Alpha'], multiply.inputs[1])
-                alpha = multiply.outputs[0]
-        if base_color is None:
-            base_color, base_alpha = color, alpha
-        elif config.shader.custom_src == '2' and config.shader.custom_dest == '5':
-            mix = tree.nodes.new('ShaderNodeMixRGB')
-            mix.location = (-250, -pass_index * 250)
-            tree.links.new(alpha, mix.inputs[0])
-            tree.links.new(base_color, mix.inputs[1])
-            tree.links.new(color, mix.inputs[2])
-            base_color = mix.outputs[0]
-    bsdf = tree.nodes.get('Principled BSDF')
-    if base_color is not None:
-        tree.links.new(base_color, bsdf.inputs['Base Color'])
-        first = material.w3d_material_settings.passes[0]
-        if first.shader.alpha_test or first.shader.custom_src == '2':
-            tree.links.new(base_alpha, bsdf.inputs['Alpha'])
 
 
 def create_vertex_material(context, principleds, structure, mesh, b_mesh, name, triangles, mesh_ob):
@@ -197,8 +132,7 @@ def create_vertex_material(context, principleds, structure, mesh, b_mesh, name, 
             settings.active_pass_index = 0
             if settings.passes:
                 apply_pass_to_material(material, settings, settings.passes[0])
-            _create_pass_preview(material, mesh)
-            set_blend_method(material, 'CLIP')
+            create_pass_preview(material, mesh)
             mesh.materials.append(material)
             principleds.append(principled)
             slots[key] = slot

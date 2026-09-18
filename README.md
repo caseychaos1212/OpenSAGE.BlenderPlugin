@@ -36,6 +36,23 @@ Enable the new workflow per scene: open the Scene properties sidebar, expand the
 
 NOTE: When importing weapon animations import the base mesh first, then import the animation with "Keep Rigid meshes static".
 
+### Export status window
+
+**Show export status** is enabled by default in the W3D/W3X export dialog. A
+separate Blender window shows the current mesh, processing step, item counts,
+elapsed time, and recent warnings/errors. Steps include modifiers, UV seams,
+normals, materials, collision-tree building, animation, and writing files.
+The bar measures the current step rather than estimating total export time.
+
+The window stays open with the final result and is reused for the next export.
+You can resize it and close it when finished. **Review export log** still shows
+the full report afterward. Background exports do not open a window.
+
+Blender still performs the export on its main thread. Status refreshes at work
+checkpoints; a single long Blender operation, such as evaluating a modifier,
+can hold the display on that step until it returns. The status window does not
+provide cancellation or make the export run in the background.
+
 ### Object export settings
 
 Open **Object Properties > W3D Object** (the orange square tab) for W3D export
@@ -97,6 +114,13 @@ is off, including scenes
 containing only attachments. Use Hierarchical Model or Terrain export (or enable
 the Renegade workflow) to write the HLOD data.
 
+For proxies, leave **Attachment Identifier** blank to use the object name before
+`~`: `rock_prop~west.001` references `rock_prop`. An explicit identifier is used
+exactly as entered. Long proxy mesh names are automatically given unique export
+pivot names of at most 15 characters for W3D, so long instance suffixes do not
+block export. Each instance keeps its own transform; Blender object names and
+armature bone names are unchanged. The export log lists the shortened names.
+
 Turn off **Export Object** to keep a cookie cutter or other helper in the blend file
 while omitting its geometry, transform, and attachment from W3D/W3X export. This
 also keeps long helper names out of export name validation. The setting applies
@@ -104,6 +128,9 @@ to the individual object; its children retain their own export settings. Viewpor
 visibility and the W3D **Hide** flag remain separate from export inclusion.
 
 ### Map materials and missing textures
+
+W3D imports set Blender material roughness to **1.0** for a closer match to
+engine lighting. You can adjust it in Blender after importing.
 
 W3D vertex-material imports keep the material pass stack, both texture stages,
 each stage's UV channel, and per-pass shader settings. Texture IDs select from
@@ -117,6 +144,41 @@ limited; uniform terrain pass stacks support import and export.
 Missing textures do not stop an import. Use **File > External Data > Find Missing
 Files**, then select your texture folder. Missing images retain file references
 so Blender can relink them, including textures used by secondary stages.
+
+### Texture blending and painting
+
+Imported W3D vertex materials preview texture alpha, per-pass vertex colors and
+alpha, opacity, detail-texture operations, and source/destination pass blends.
+Opaque terrain stays opaque underneath blended layers. Prelit vertex-material
+passes use their own color arrays too.
+
+To create a new terrain blend:
+
+1. UV unwrap a mesh with one material slot (or no material).
+2. Open **Material Properties > OpenW3D Material > Texture Blending** and choose
+   **Create Texture Blend**. This assigns a new two-pass material; the previous
+   material remains available in Blender.
+3. Choose the **Base Texture** and **Blend Texture**. The image buttons can open
+   textures from disk. Each pass also has its own UV channel in the Vertex tab.
+4. Select the **Blend** pass and click **Paint Blend Mask**. Paint white to reveal
+   the blend texture, black to show the base, and gray for a transition. This is
+   vertex painting, so add vertices where you need finer transitions.
+5. Use **Update Blend Preview** after changing textures, UV channels, or blend
+   settings. Mask painting updates the preview immediately.
+
+Existing alpha-blended passes can also use **Paint Blend Mask**. The initial
+mask copies imported vertex alpha when available. Each pass has a separate
+**Blend Mask** color attribute; the exporter writes its RGB average as that
+pass's W3D vertex alpha, preserving mask boundaries without editing the source
+mesh. The separate Geometry **Vertex Alpha** checkbox is not required. Named
+pass masks take precedence over that checkbox. Export and reimport retain the
+blend through W3D alpha data; the Blender mask name is not part of the W3D file.
+
+The supported authoring/export workflow uses one Blender material with multiple
+W3D passes. Blender previews approximate engine lighting and compositing;
+engine-specific environment/bump mapping, fog, and blending against other
+objects can still look different. Blend calculations follow the
+[OpenW3D fixed-function shader](https://github.com/w3dhub/OpenW3D/blob/master/Code/ww3d2/shader.cpp).
 
 ### Game bone directions
 

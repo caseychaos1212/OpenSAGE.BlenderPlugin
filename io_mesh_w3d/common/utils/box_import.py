@@ -2,6 +2,7 @@
 # Written by Stephan Vedder and Michael Schnabel
 
 import bpy
+from bpy_extras import node_shader_utils
 from ...common.utils.helpers import *
 from ...common.structs.collision_box import *
 
@@ -41,6 +42,7 @@ def create_box(box, coll):
     mat = bpy.data.materials.new(box.name() + ".Material")
 
     mat.diffuse_color = box.color.to_vector_rgba()
+    node_shader_utils.PrincipledBSDFWrapper(mat, is_readonly=False).roughness = 1.0
     cube.materials.append(mat)
     box_object.location = box.center
     link_object_to_active_scene(box_object, coll)

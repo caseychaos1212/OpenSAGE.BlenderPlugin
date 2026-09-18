@@ -2,6 +2,7 @@
 # Written by Stephan Vedder and Michael Schnabel
 
 import bpy
+from ...export_status import report_export_progress
 from mathutils import Quaternion
 from ...common.utils.helpers import *
 from ...common.utils.animation_compat import iter_animation_data_fcurves
@@ -21,7 +22,7 @@ def is_visibility(fcu):
     return 'visibility' in fcu.data_path or 'hide' in fcu.data_path
 
 
-def retrieve_channels(obj, hierarchy, timecoded, name=None, default_frame_range=None):
+def retrieve_channels(obj, hierarchy, timecoded, name=None, default_frame_range=None, progress_context=None):
     if obj.animation_data is None or obj.animation_data.action is None:
         return []
 
@@ -29,7 +30,10 @@ def retrieve_channels(obj, hierarchy, timecoded, name=None, default_frame_range=
     channels = []
     root_channels = []
 
-    for fcu in iter_animation_data_fcurves(obj.animation_data):
+    curves = list(iter_animation_data_fcurves(obj.animation_data))
+    for curve_index, fcu in enumerate(curves):
+        report_export_progress(progress_context, 'Sampling animation channels', object_name=obj.name,
+                               detail=f'Channel {curve_index + 1} of {len(curves)}')
         if name is None:
             values = fcu.data_path.split('"')
             if len(values) == 1:
@@ -89,6 +93,8 @@ def retrieve_channels(obj, hierarchy, timecoded, name=None, default_frame_range=
 
         if timecoded:
             for i, keyframe in enumerate(fcu.keyframe_points):
+                if i % 1024 == 0:
+                    report_export_progress(progress_context, current=i, total=num_keyframes, unit='Keyframes')
                 frame = int(keyframe.co.x)
                 val = keyframe.co.y
 
@@ -104,6 +110,9 @@ def retrieve_channels(obj, hierarchy, timecoded, name=None, default_frame_range=
 
         else:
             for frame in range(channel.first_frame, channel.last_frame + 1):
+                if (frame - channel.first_frame) % 1024 == 0:
+                    report_export_progress(progress_context, current=frame - channel.first_frame,
+                                           total=channel.last_frame - channel.first_frame + 1, unit='Frames')
                 val = fcu.evaluate(frame)
                 i = frame - channel.first_frame
 
@@ -155,15 +164,15 @@ def retrieve_animation(context, animation_name, hierarchy, rig, timecoded, frame
     fallback_range = (start_frame, end_frame)
 
     for mesh in get_objects('MESH'):
-        if retrieve_channels(mesh, hierarchy, timecoded, mesh.name, default_frame_range=fallback_range):
+        if retrieve_channels(mesh, hierarchy, timecoded, mesh.name, default_frame_range=fallback_range, progress_context=context):
             context.warning(f'Mesh \'{mesh.name}\' is animated, animate its parent bone instead!')
 
     if rig is not None:
-        chnA = retrieve_channels(rig, hierarchy, timecoded, default_frame_range=fallback_range)
+        chnA = retrieve_channels(rig, hierarchy, timecoded, default_frame_range=fallback_range, progress_context=context)
         if len(chnA) > 0:
             channels.extend(chnA)
             animation_name = rig.animation_data.action.name
-        chnB = retrieve_channels(rig.data, hierarchy, timecoded, default_frame_range=fallback_range)
+        chnB = retrieve_channels(rig.data, hierarchy, timecoded, default_frame_range=fallback_range, progress_context=context)
         if len(chnB) > 0:
             channels.extend(chnB)
             animation_name = rig.animation_data.action.name

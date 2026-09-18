@@ -21,6 +21,7 @@ def create_dazzle(context, dazzle, coll):
     set_transparency_overlap(material, False)
 
     principled = node_shader_utils.PrincipledBSDFWrapper(material, is_readonly=False)
+    principled.roughness = 1.0
     principled.base_color = (255, 255, 255)
     principled.base_color_texture.image = find_texture(context, 'SunDazzle.tga')
     dazzle_mesh.materials.append(material)

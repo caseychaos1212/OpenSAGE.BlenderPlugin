@@ -6,6 +6,7 @@ import os
 import bpy
 import bmesh
 import math
+from ...export_status import report_export_progress
 from mathutils import Vector, Matrix
 from bpy_extras import node_shader_utils
 
@@ -61,7 +62,10 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
 
     depsgraph = bpy.context.evaluated_depsgraph_get() if apply_modifiers else None
 
-    for mesh_object in mesh_objects:
+    for mesh_index, mesh_object in enumerate(mesh_objects):
+        report_export_progress(context, 'Evaluating mesh and modifiers',
+                               object_name=mesh_object.name, mesh_index=mesh_index + 1,
+                               mesh_total=len(mesh_objects), force=True)
 
         source_object = mesh_object
 
@@ -117,7 +121,10 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
                     mesh.auto_smooth_angle = math.radians(180.0)
             alpha_layer = active_color_layer(mesh) if vertex_alpha else None
             alpha_layer_name = alpha_layer.name if alpha_layer is not None else None
-            b_mesh = prepare_bmesh(context, mesh, keep_normals, alpha_layer)
+            mask_names = sorted({p.blend_mask for mat in mesh.materials if mat is not None
+                                 for p in mat.original.w3d_material_settings.passes if p.blend_mask})
+            blend_masks = {name: f'_w3d_blend_{i}' for i, name in enumerate(mask_names)}
+            b_mesh = prepare_bmesh(context, mesh, keep_normals, alpha_layer, blend_masks)
 
             if len(mesh.vertices) == 0:
                 context.warning(f'mesh \'{mesh.name}\' does not have a single vertex!')
@@ -129,6 +136,7 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
             header.sph_radius = radius
 
             if mesh.uv_layers:
+                report_export_progress(context, 'Calculating tangents', force=True)
                 mesh.calc_tangents()
 
             header.vert_count = len(mesh.vertices)
@@ -149,7 +157,11 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
             unskinned_vertices_error = False
             overskinned_vertices_error = False
 
+            report_export_progress(context, 'Transforming vertices and normals', current=0,
+                                   total=len(mesh.vertices), unit='Vertices')
             for i, vertex in enumerate(mesh.vertices):
+                if i % 1024 == 0:
+                    report_export_progress(context, current=i)
                 mesh_struct.shade_ids.append(i)
                 matrix = Matrix.Identity(4)
                 matrix_2 = Matrix.Identity(4)
@@ -244,7 +256,11 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
                  mesh_object.bound_box[6][1],
                  mesh_object.bound_box[6][2]))
 
+            report_export_progress(context, 'Building triangles', current=0,
+                                   total=len(mesh.polygons), unit='Triangles')
             for poly in mesh.polygons:
+                if poly.index % 1024 == 0:
+                    report_export_progress(context, current=poly.index)
                 surface_type = 13
                 if 0 <= poly.material_index < len(mesh.materials):
                     surface_type = resolve_triangle_surface_type(mesh.materials[poly.material_index])
@@ -290,11 +306,15 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
 
             tx_stages = []
             for i, uv_layer in enumerate(mesh.uv_layers):
+                report_export_progress(context, 'Exporting UV coordinates', detail=uv_layer.name,
+                                       current=0, total=len(b_mesh.faces), unit='Faces')
                 stage = TextureStage(
                     tx_ids=[[i]],
                     tx_coords=[[Vector((0.0, 0.0))] * len(mesh_struct.verts)])
 
                 for j, face in enumerate(b_mesh.faces):
+                    if j % 1024 == 0:
+                        report_export_progress(context, current=j)
                     for loop in face.loops:
                         vert_index = mesh_struct.triangles[j].vert_ids[loop.index % 3]
                         stage.tx_coords[0][vert_index] = get_uv(uv_layer, loop.index).copy()
@@ -303,11 +323,18 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
             b_mesh.free()
 
             texture_cache = {}
+            pass_masks = []
 
             for i, material in enumerate(mesh.materials):
+                report_export_progress(context, 'Exporting materials and textures',
+                                       current=i, total=len(mesh.materials), unit='Materials',
+                                       detail=material.name if material else '')
                 if material is None:
                     context.warning(f'mesh \'{mesh_object.name}\' uses a invalid/empty material!')
                     continue
+
+                # Custom pass settings can be newer than the evaluated material.
+                material = material.original
 
                 # Renegade vertex-material passes do not describe shader materials.
                 shader_material = context.file_format == 'W3X' or (
@@ -401,14 +428,20 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
                                 mesh_struct.shaders[-1].texturing = 1
 
                         mesh_struct.material_passes.append(mat_pass)
+                        pass_masks.append(pass_config.blend_mask if pass_config is not None else '')
                 finally:
                     if original_state is not None:
                         restore_material_state(material, original_state)
 
             if build_aabbtree:
-                mesh_struct.aabbtree = build_aabb_tree(mesh_struct)
+                report_export_progress(context, 'Building collision tree', current=0,
+                                       total=len(mesh_struct.triangles), unit='Triangles placed', force=True)
+                mesh_struct.aabbtree = build_aabb_tree(mesh_struct, progress_context=context)
 
+            report_export_progress(context, 'Exporting vertex colors and blend masks')
             for layer in get_vertex_color_layers(mesh):
+                if layer.name in blend_masks:
+                    continue
                 if vertex_alpha and layer.name == alpha_layer_name:
                     # This attribute supplies alpha instead of diffuse RGB.
                     continue
@@ -433,6 +466,9 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
                 setattr(mesh_struct.material_passes[index], attribute, target)
 
                 for i, loop in enumerate(mesh.loops):
+                    if i % 1024 == 0:
+                        report_export_progress(context, current=i, total=len(mesh.loops),
+                                               unit='Corners', detail=layer.name)
                     color = layer.data[i].color
                     target[loop.vertex_index] = RGBA(
                         r=round(color[0] * 255), g=round(color[1] * 255),
@@ -440,6 +476,18 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
 
             if vertex_alpha:
                 apply_vertex_alpha(context, mesh, mesh_struct, mesh_object.name)
+            for mat_pass, mask_name in zip(mesh_struct.material_passes, pass_masks):
+                if not mask_name:
+                    continue
+                attribute = mesh.attributes.get(blend_masks[mask_name])
+                if attribute is None:
+                    context.error(f"mesh '{mesh_object.name}': blend mask '{mask_name}' is missing")
+                    naming_error = True
+                    continue
+                if not mat_pass.dcg:
+                    mat_pass.dcg = [RGBA(r=255, g=255, b=255, a=255) for _ in mesh.vertices]
+                for loop in mesh.loops:
+                    mat_pass.dcg[loop.vertex_index].a = int(attribute.data[loop.index].value * 255)
 
             if context.file_format == 'W3X' and object_settings and any((
                     object_settings.geom_shatter, object_settings.geom_prelit,
@@ -508,6 +556,8 @@ def retrieve_meshes(context, hierarchy, rig, container_name, force_vertex_materi
             mesh_struct.header.matl_count = max(
                 len(mesh_struct.vert_materials), len(mesh_struct.shader_materials))
             mesh_structs.append(mesh_struct)
+            report_export_progress(context, 'Mesh prepared', current=mesh_index + 1,
+                                   total=len(mesh_objects), unit='Meshes', detail='')
 
         finally:
             if apply_modifiers:
@@ -541,9 +591,10 @@ def active_color_layer(mesh):
     return mesh.color_attributes.active_color
 
 
-def prepare_bmesh(context, mesh, keep_normals=False, alpha_layer=None):
+def prepare_bmesh(context, mesh, keep_normals=False, alpha_layer=None, blend_masks=None):
     if keep_normals and hasattr(mesh, 'calc_normals_split'):
         mesh.calc_normals_split()
+    report_export_progress(context, 'Preparing mesh attributes')
     b_mesh = bmesh.new()
     b_mesh.from_mesh(mesh)
     # Temporary corner attributes survive triangulation and edge splitting,
@@ -556,7 +607,18 @@ def prepare_bmesh(context, mesh, keep_normals=False, alpha_layer=None):
         b_mesh.loops.layers.float.remove(alphas)
     normals = b_mesh.loops.layers.float_vector.new(EXPORT_NORMAL_ATTRIBUTE) if keep_normals else None
     alphas = b_mesh.loops.layers.float.new(EXPORT_ALPHA_ATTRIBUTE) if alpha_layer is not None else None
+    mask_layers = []
+    colors = mesh.vertex_colors if bpy.app.version < (3, 2, 0) else mesh.color_attributes
+    for name, attribute_name in (blend_masks or {}).items():
+        layer = colors.get(name)
+        if layer is not None:
+            attribute = b_mesh.loops.layers.float.get(attribute_name)
+            if attribute is None:
+                attribute = b_mesh.loops.layers.float.new(attribute_name)
+            mask_layers.append((layer, attribute))
     for face, polygon in zip(b_mesh.faces, mesh.polygons):
+        if polygon.index % 1024 == 0:
+            report_export_progress(context, current=polygon.index, total=len(mesh.polygons), unit='Faces')
         for loop, loop_index in zip(face.loops, polygon.loop_indices):
             if normals is not None:
                 loop[normals] = mesh.loops[loop_index].normal
@@ -565,6 +627,10 @@ def prepare_bmesh(context, mesh, keep_normals=False, alpha_layer=None):
                          else loop_index)
                 color = alpha_layer.data[index].color
                 loop[alphas] = max(0.0, min(1.0, sum(color[:3]) / 3.0))
+            for layer, attribute in mask_layers:
+                index = loop.vert.index if getattr(layer, 'domain', 'CORNER') == 'POINT' else loop_index
+                loop[attribute] = max(0.0, min(1.0, sum(layer.data[index].color[:3]) / 3.0))
+    report_export_progress(context, 'Triangulating mesh', force=True)
     bmesh.ops.triangulate(b_mesh, faces=list(b_mesh.faces))
     b_mesh.to_mesh(mesh)
     b_mesh.free()
@@ -573,7 +639,9 @@ def prepare_bmesh(context, mesh, keep_normals=False, alpha_layer=None):
     b_mesh = bmesh.new()
     b_mesh.from_mesh(mesh)
     split_multi_uv_vertices(context, mesh, b_mesh)
-    split_export_attribute_vertices(b_mesh, keep_normals, alpha_layer is not None)
+    report_export_progress(context, 'Splitting normal and alpha seams')
+    split_export_attribute_vertices(b_mesh, keep_normals, alpha_layer is not None,
+                                    tuple((blend_masks or {}).values()), progress_context=context)
     b_mesh.to_mesh(mesh)
     mesh.update()
     if keep_normals:
@@ -588,13 +656,17 @@ def prepare_bmesh(context, mesh, keep_normals=False, alpha_layer=None):
     return b_mesh
 
 
-def split_export_attribute_vertices(b_mesh, keep_normals, vertex_alpha):
+def split_export_attribute_vertices(b_mesh, keep_normals, vertex_alpha, blend_masks=(), progress_context=None):
     normal_layer = b_mesh.loops.layers.float_vector.get(EXPORT_NORMAL_ATTRIBUTE) if keep_normals else None
     alpha_layer = b_mesh.loops.layers.float.get(EXPORT_ALPHA_ATTRIBUTE) if vertex_alpha else None
-    if normal_layer is None and alpha_layer is None:
+    mask_layers = [b_mesh.loops.layers.float.get(name) for name in blend_masks]
+    mask_layers = [layer for layer in mask_layers if layer is not None]
+    if normal_layer is None and alpha_layer is None and not mask_layers:
         return
     edges = set()
-    for vertex in b_mesh.verts:
+    for index, vertex in enumerate(b_mesh.verts):
+        if index % 1024 == 0:
+            report_export_progress(progress_context, current=index, total=len(b_mesh.verts), unit='Vertices')
         loops = list(vertex.link_loops)
         if not loops:
             continue
@@ -602,6 +674,7 @@ def split_export_attribute_vertices(b_mesh, keep_normals, vertex_alpha):
         different = any(
             (normal_layer is not None and (loop[normal_layer] - first[normal_layer]).length_squared > NORMAL_SEAM_EPSILON_SQUARED)
             or (alpha_layer is not None and abs(loop[alpha_layer] - first[alpha_layer]) > 1e-6)
+            or any(abs(loop[layer] - first[layer]) > 1e-6 for layer in mask_layers)
             for loop in loops[1:])
         if different:
             edges.update(vertex.link_edges)
@@ -660,16 +733,21 @@ def resolve_triangle_surface_type(material):
         return 13
 
 
-def build_aabb_tree(mesh_struct, max_polys_per_leaf=4):
+def build_aabb_tree(mesh_struct, max_polys_per_leaf=4, progress_context=None):
     tris = mesh_struct.triangles or []
     verts = mesh_struct.verts or []
     if not tris or not verts:
         return None
 
+    placed = 0
+
     def tri_bounds(indices):
         min_corner = Vector((float('inf'), float('inf'), float('inf')))
         max_corner = Vector((float('-inf'), float('-inf'), float('-inf')))
-        for tri_idx in indices:
+        for index, tri_idx in enumerate(indices):
+            if index % 2048 == 0:
+                report_export_progress(progress_context, current=placed,
+                                       detail=f'Checking a group of {len(indices):,} triangles')
             tri = tris[tri_idx]
             for vert_id in tri.vert_ids:
                 vert = verts[vert_id]
@@ -692,9 +770,11 @@ def build_aabb_tree(mesh_struct, max_polys_per_leaf=4):
             self.max = Vector((0.0, 0.0, 0.0))
 
     def build(indices):
+        nonlocal placed
         node = _Node(indices)
         node.min, node.max = tri_bounds(indices)
         if len(indices) <= max_polys_per_leaf:
+            placed += len(indices)
             return node
         extent = node.max - node.min
         axis = 0
@@ -744,6 +824,7 @@ def build_aabb_tree(mesh_struct, max_polys_per_leaf=4):
                 children=Children(front=front_index, back=back_index))
         return index
 
+    report_export_progress(progress_context, detail='Writing collision tree nodes', current=placed)
     flatten(root)
     header = AABBTreeHeader(node_count=len(nodes), poly_count=len(poly_indices))
     return AABBTree(header=header, poly_indices=poly_indices, nodes=nodes)
@@ -827,8 +908,12 @@ def split_multi_uv_vertices(context, mesh, b_mesh):
         ver.select_set(False)
 
     for i, uv_layer in enumerate(mesh.uv_layers):
+        report_export_progress(context, 'Splitting UV seams', detail=uv_layer.name,
+                               current=0, total=len(b_mesh.faces), unit='Faces')
         tx_coords = [None] * get_uv_count(uv_layer)
         for j, face in enumerate(b_mesh.faces):
+            if j % 1024 == 0:
+                report_export_progress(context, current=j)
             for loop in face.loops:
                 vert_index = mesh.polygons[j].vertices[loop.index % 3]
                 if tx_coords[vert_index] is None:

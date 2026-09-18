@@ -5,6 +5,8 @@ import os
 
 import bpy
 
+from .export_status import report_export_progress
+
 from .common.structs.data_context import *
 
 from .common.utils.mesh_export import *
@@ -26,11 +28,13 @@ def _renegade_workflow_enabled(export_context=None):
 
 
 def save_data(context, export_settings):
+    report_export_progress(context, 'Preparing export', detail='Checking scene and export settings', force=True)
     data_context = retrieve_data(context, export_settings)
 
     if data_context is None:
         return {'CANCELLED'}
 
+    report_export_progress(context, 'Writing files', mesh_index=0, mesh_total=0, object_name='')
     if context.file_format == 'W3X':
         context.filename_ext = '.w3x'
         from .w3x.export_w3x import save
@@ -65,6 +69,7 @@ def retrieve_data(context, export_settings):
     hierarchy, rig, hlod = None, None, None
 
     if effective_mode != 'M':
+        report_export_progress(context, 'Building hierarchy', force=True)
         hierarchy, rig = retrieve_hierarchy(context, container_name)
         hlod = create_hlod(hierarchy, container_name)
 
@@ -81,6 +86,7 @@ def retrieve_data(context, export_settings):
     setattr(context, '_w3d_export_options', export_options)
 
     try:
+        report_export_progress(context, 'Collecting collision boxes and dazzles')
         data_context = DataContext(
             container_name=container_name,
             rig=rig,
@@ -106,11 +112,14 @@ def retrieve_data(context, export_settings):
                 context.error('Scene does not contain any meshes, aborting export!')
                 return None
 
-            for mesh in data_context.meshes:
+            for index, mesh in enumerate(data_context.meshes):
+                report_export_progress(context, 'Validating meshes', object_name=mesh.name(),
+                                       current=index, total=len(data_context.meshes), unit='Meshes')
                 if not mesh.validate(context):
                     context.error('aborting export!')
                     return None
 
+        report_export_progress(context, 'Validating hierarchy and attachments', object_name='')
         if 'H' in effective_mode and not hierarchy.validate(context):
             context.error('aborting export!')
             return None
@@ -126,6 +135,7 @@ def retrieve_data(context, export_settings):
                     return None
 
         if 'A' in effective_mode:
+            report_export_progress(context, 'Exporting animation', mesh_total=0, mesh_index=0, force=True)
             timecoded = export_settings['compression'] == 'TC'
             data_context.animation = retrieve_animation(
                 context,

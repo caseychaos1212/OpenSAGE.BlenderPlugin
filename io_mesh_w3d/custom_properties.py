@@ -211,10 +211,10 @@ W3D_DETAIL_COLOR_FUNC_ITEMS = [
     ('2', 'Scale', 'Keep whites unchanged while darker values darken the result.'),
     ('3', 'InvScale', 'Use an inverse-scale blend that preserves brightness better than Add.'),
     ('4', 'Add', 'Brighten the base color with additive overlay.'),
-    ('5', 'Sub', 'Darken the result with subtractive overlay.'),
-    ('6', 'SubR', 'Reverse subtractive blend.'),
-    ('7', 'Blend', 'Blend local and detail color using local alpha.'),
-    ('8', 'DetailBlend', 'Use the detail texture and self-illuminate it.'),
+    ('5', 'Sub', 'Subtract the shaded base from stage 1 color.'),
+    ('6', 'SubR', 'Subtract stage 1 color from the shaded base.'),
+    ('7', 'Blend', 'Blend toward stage 1 using stage 1 texture alpha.'),
+    ('8', 'DetailBlend', 'Blend toward stage 1 using the shaded stage 0 alpha.'),
     ('9', 'Alt', 'Alternate legacy detail color function.'),
     ('10', 'DetailAlt', 'Alternate detail override function.'),
     ('11', 'ScaleAlt', 'Alternate scale detail function.'),
@@ -303,6 +303,20 @@ def _sync_blend_mode_from_controls(shader_settings):
         shader_settings.blend_mode = inferred
     finally:
         _set_shader_blend_guard(shader_settings, False)
+
+def _sync_detail_control(shader_settings, component):
+    # Imported files may distinguish legacy and post-lighting detail modes.
+    # Explicit edits must also reach the engine's stage-1 mode.
+    settings = getattr(shader_settings.id_data, 'w3d_material_settings', None)
+    if settings is None:
+        return
+    for config in settings.passes:
+        if config.shader.as_pointer() == shader_settings.as_pointer():
+            extra = dict(config.get('_w3d_shader_extra', {}))
+            extra[f'post_detail_{component}_func'] = int(getattr(shader_settings, f'detail_{component}'))
+            config['_w3d_shader_extra'] = extra
+            break
+
 
 W3D_VERTEX_MAPPER_TYPES = [
     (0x00, 'UV', 'Use authored UV coordinates.'),
@@ -529,15 +543,21 @@ class W3DShaderSettings(PropertyGroup):
         name='Detail Color Func',
         description='Choose how stage 1 color combines with stage 0.',
         items=W3D_DETAIL_COLOR_FUNC_ITEMS,
-        default='0')
+        default='0',
+        update=lambda self, _context: _sync_detail_control(self, 'color'))
     detail_alpha: EnumProperty(
         name='Detail Alpha Func',
         description='Choose how stage 1 alpha combines with stage 0.',
         items=W3D_DETAIL_ALPHA_FUNC_ITEMS,
-        default='0')
+        default='0',
+        update=lambda self, _context: _sync_detail_control(self, 'alpha'))
 
 
 class W3DMaterialPass(PropertyGroup):
+    blend_mask: StringProperty(
+        name='Blend Mask',
+        description='Painted color attribute used as this pass alpha: black hides it, white shows it',
+        default='')
     name: StringProperty(name='Pass Name', default='Pass')
     ambient: FloatVectorProperty(
         name='Ambient',

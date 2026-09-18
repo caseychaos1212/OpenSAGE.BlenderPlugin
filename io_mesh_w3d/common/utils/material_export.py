@@ -273,6 +273,8 @@ def retrieve_shader(material, pass_settings=None):
         post_detail_alpha_func=int(material.shader.post_detail_alpha_func))
 
     if pass_settings is not None:
+        shader.post_detail_color_func = shader.detail_color_func
+        shader.post_detail_alpha_func = shader.detail_alpha_func
         for key, value in pass_settings.get('_w3d_shader_extra', {}).items():
             if key in ('color_mask', 'fog_func', 'shader_preset', 'post_detail_color_func', 'post_detail_alpha_func'):
                 setattr(shader, key, value)

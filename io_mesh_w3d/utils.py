@@ -4,6 +4,9 @@
 
 class ReportHelper():
     def _append_log(self, level, msg):
+        status = getattr(self, '_w3d_export_status', None)
+        if status is not None:
+            status.record(level, msg)
         log = getattr(self, '_w3d_log_buffer', None)
         if log is not None:
             log.append(f'{level}: {msg}')

@@ -23,7 +23,8 @@ def _find_bone_index(hierarchy, obj):
 
     parent_bone = getattr(obj, 'parent_bone', '')
     for index, pivot in enumerate(hierarchy.pivots):
-        if pivot.name == parent_bone or pivot.name == obj.name:
+        if (pivot.name == parent_bone or pivot.name == obj.name
+                or getattr(pivot, '_source_object_name', None) == obj.name):
             return index
     return 0
 

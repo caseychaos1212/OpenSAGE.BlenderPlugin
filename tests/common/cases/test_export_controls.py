@@ -86,6 +86,71 @@ class TestExportControls(TestCase):
                     self.assertEqual(Vector((10, 20, 30)), pivot.translation)
         mesh_context.evaluated_depsgraph_get.assert_not_called()
 
+    def test_proxy_long_instance_names_export_with_distinct_short_pivots(self):
+        # Reserve the likely shortened names, including a differently cased one.
+        for name in ('rock_prop', 'ROCK_PROP_1'):
+            self.new_object(name).w3d_object_settings.export_geometry = False
+        proxies = []
+        for index in range(3):
+            obj = self.new_object('rock_prop~a_long_instance_name')
+            obj.w3d_object_settings.hlod_role = 'PROXY'
+            obj.location = (index + 1, index + 2, index + 3)
+            obj.rotation_euler = (0.1 * index, 0.2, 0.3)
+            proxies.append(obj)
+        source_names = [obj.name for obj in proxies]
+        source_transforms = [obj.matrix_basis.copy() for obj in proxies]
+        bpy.context.view_layer.update()
+        self.filepath = self.outpath('proxies.w3d')
+
+        for mode in ('HM', 'TERRAIN', 'M'):
+            with self.subTest(mode=mode):
+                bpy.context.scene.w3d_scene_settings.use_renegade_workflow = mode == 'M'
+                with patch.object(self, 'error') as error:
+                    result = save_data(self, {'mode': mode, 'use_existing_skeleton': False})
+                error.assert_not_called()
+                self.assertEqual({'FINISHED'}, result)
+                exported = DataContext()
+                load_file(self, exported)
+                names = [pivot.name.casefold() for pivot in exported.hierarchy.pivots]
+                self.assertEqual(len(names), len(set(names)))
+                self.assertTrue(all(len(name) < 16 for name in names))
+                self.assertEqual([], exported.meshes)
+                attachments = exported.hlod.proxy_array.sub_objects
+                self.assertEqual(['rock_prop'] * 3, [item.identifier for item in attachments])
+                self.assertEqual(3, len({item.bone_index for item in attachments}))
+                for obj, attachment in zip(proxies, attachments):
+                    pivot = exported.hierarchy.pivots[attachment.bone_index]
+                    self.assertEqual(obj.location, pivot.translation)
+                    self.assertLess(obj.rotation_euler.to_quaternion().rotation_difference(
+                        pivot.rotation).angle, 0.0001)
+                self.assertEqual(source_names, [obj.name for obj in proxies])
+                self.assertEqual(source_transforms, [obj.matrix_basis for obj in proxies])
+
+    def test_proxy_short_pivot_names_and_explicit_identifiers_stay_unchanged(self):
+        short = self.new_object('rock_prop~1')
+        short.w3d_object_settings.hlod_role = 'PROXY'
+        long = self.new_object('rock_prop~a_long_instance_name')
+        long.w3d_object_settings.hlod_role = 'PROXY'
+        long.w3d_object_settings.hlod_identifier = 'different_proxy$1.5'
+        self.filepath = self.outpath('proxies.w3d')
+        exported = retrieve_data(self, {'mode': 'HM'})
+        self.assertIsNotNone(exported)
+        first, second = exported.hlod.proxy_array.sub_objects
+        self.assertEqual('rock_prop~1', exported.hierarchy.pivots[first.bone_index].name)
+        self.assertEqual('rock_prop', first.identifier)
+        self.assertEqual('different_proxy$1.5', second.identifier)
+        self.assertEqual('different_proxy$1.5', long.w3d_object_settings.hlod_identifier)
+
+    def test_proxy_w3x_keeps_long_pivot_names(self):
+        obj = self.new_object('rock_prop~a_long_instance_name')
+        obj.w3d_object_settings.hlod_role = 'PROXY'
+        self.set_format('W3X')
+        self.filepath = self.outpath('proxies.w3x')
+        exported = retrieve_data(self, {'mode': 'HM'})
+        attachment = exported.hlod.proxy_array.sub_objects[0]
+        self.assertEqual('rock_prop', attachment.identifier)
+        self.assertEqual(obj.name, exported.hierarchy.pivots[attachment.bone_index].name)
+
     def test_excluded_long_name_helpers_are_omitted_from_all_model_data(self):
         included = self.new_object('building')
         included.w3d_object_settings.hlod_role = 'AGGREGATE'

@@ -14,6 +14,7 @@ def save(context, export_settings, data_context):
     export_mode = export_settings['mode']
     context.info(f'export mode: {export_mode}')
 
+    report_export_progress(context, 'Preparing XML document', detail=filepath, force=True)
     root = create_root()
     includes = create_node(root, 'Includes')
 
@@ -24,6 +25,8 @@ def save(context, export_settings, data_context):
             context.warning('Scene does contain multiple meshes, exporting only the first with export mode M!')
         data_context.meshes[0].header.container_name = ''
         data_context.meshes[0].header.mesh_name = data_context.container_name
+        report_export_progress(context, 'Building mesh XML', object_name=data_context.meshes[0].name(),
+                               current=0, total=1, unit='Meshes', force=True)
         data_context.meshes[0].create(root)
 
     elif export_mode == 'HM':
@@ -40,7 +43,9 @@ def save(context, export_settings, data_context):
                 write_struct(data_context.hierarchy, path)
 
         if export_settings['create_texture_xmls']:
-            for texture in data_context.textures:
+            for index, texture in enumerate(data_context.textures):
+                report_export_progress(context, 'Writing texture XML', object_name=texture,
+                                       current=index, total=len(data_context.textures), unit='Textures')
                 id = texture.rsplit('.', 1)[0]
                 texture_include = Include(type='all', source='ART:' + id + '.xml')
                 texture_include.create(includes)
@@ -58,7 +63,9 @@ def save(context, export_settings, data_context):
             else:
                 box.create(root)
 
-        for mesh in data_context.meshes:
+        for index, mesh in enumerate(data_context.meshes):
+            report_export_progress(context, 'Building mesh XML', object_name=mesh.name(),
+                                   current=index, total=len(data_context.meshes), unit='Meshes', force=True)
             if export_settings['individual_files']:
                 mesh_include = Include(type='all', source='ART:' + mesh.identifier() + '.w3x')
                 mesh_include.create(includes)
@@ -74,13 +81,17 @@ def save(context, export_settings, data_context):
         data_context.hierarchy.create(root)
 
         if export_settings['create_texture_xmls']:
-            for texture in data_context.textures:
+            for index, texture in enumerate(data_context.textures):
+                report_export_progress(context, 'Writing texture XML', object_name=texture,
+                                       current=index, total=len(data_context.textures), unit='Textures')
                 id = texture.split('.')[0]
                 path = directory + id + '.xml'
                 context.info('Saving file :' + path)
                 write_struct(Texture(id=id, file=texture), path)
 
-            for texture in data_context.textures:
+            for index, texture in enumerate(data_context.textures):
+                report_export_progress(context, 'Writing texture XML', object_name=texture,
+                                       current=index, total=len(data_context.textures), unit='Textures')
                 id = texture.split('.')[0]
                 texture_include = Include(type='all', source='ART:' + id + '.xml')
                 texture_include.create(includes)
@@ -88,7 +99,9 @@ def save(context, export_settings, data_context):
         for box in data_context.collision_boxes:
             box.create(root)
 
-        for mesh in data_context.meshes:
+        for index, mesh in enumerate(data_context.meshes):
+            report_export_progress(context, 'Building mesh XML', object_name=mesh.name(),
+                                   current=index, total=len(data_context.meshes), unit='Meshes', force=True)
             mesh.create(root)
 
         data_context.hlod.create(root)
@@ -107,6 +120,7 @@ def save(context, export_settings, data_context):
         context.error(f'unsupported export mode: \'{export_mode}\', aborting export!')
         return {'CANCELLED'}
 
+    report_export_progress(context, 'Saving XML file', object_name='', detail=filepath, force=True)
     write(root, filepath)
 
     context.info('finished')

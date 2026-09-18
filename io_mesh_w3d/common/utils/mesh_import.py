@@ -86,7 +86,10 @@ def create_mesh(context, mesh_struct, coll, hierarchy=None, sub_object=None):
                 val = mesh.face_maps[surface_type_name].value.add()
                 val.value = i
 
-    for i, mat_pass in enumerate(mesh_struct.material_passes):
+    color_passes = (mesh_struct.prelit_vertex.material_passes
+                    if not mesh_struct.vert_materials and mesh_struct.prelit_vertex
+                    else mesh_struct.material_passes)
+    for i, mat_pass in enumerate(color_passes):
         create_vertex_color_layer(mesh, mat_pass.dcg, 'DCG', i)
         create_vertex_color_layer(mesh, mat_pass.dig, 'DIG', i)
         create_vertex_color_layer(mesh, mat_pass.scg, 'SCG', i)
@@ -116,6 +119,11 @@ def create_mesh(context, mesh_struct, coll, hierarchy=None, sub_object=None):
         for mat_pass in mesh_struct.material_passes:
             create_uvlayer(context, mesh, b_mesh, triangles, mat_pass)
             create_uvlayer_2(context, mesh, b_mesh, triangles, mat_pass)
+
+    if context.file_format == 'W3D':
+        # Use a fully rough Blender preview for the engine's material lighting.
+        for principled in principleds:
+            principled.roughness = 1.0
 
     b_mesh.free()
     mesh.update()

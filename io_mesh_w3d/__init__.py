@@ -14,6 +14,7 @@ from bpy_extras import node_shader_utils
 from bpy_extras.io_utils import ImportHelper, ExportHelper
 from .utils import ReportHelper
 from .export_utils import save_data
+from .export_status import start_export_status, unregister_export_status
 from .import_logging import write_import_log
 from .custom_properties import *
 from .geometry_export import *
@@ -21,6 +22,9 @@ from .bone_volume_export import *
 from .common.utils.material_settings_bridge import apply_pass_to_material
 from .common.utils.object_settings_bridge import get_hlod_role
 from .common.utils.bone_display import game_bone_description
+from .texture_blending import (
+    W3D_OT_create_texture_blend, W3D_OT_refresh_blend_preview, W3D_OT_paint_blend_mask,
+)
 from .common.utils.helpers import enable_nodes
 
 W3D_PRESETS = [
@@ -400,6 +404,11 @@ class ExportW3D(bpy.types.Operator, ExportHelper, ReportHelper):
         min=0,
         update=_clamp_frame_end)
 
+    show_export_status: BoolProperty(
+        name='Show export status',
+        description='Open a live window showing export stages, objects, elapsed time, and warnings',
+        default=True)
+
     export_review_log: BoolProperty(
         name='Review export log',
         description='Display a popup with all export log messages when the process completes',
@@ -424,6 +433,7 @@ class ExportW3D(bpy.types.Operator, ExportHelper, ReportHelper):
         'animation_frame_start',
         'animation_frame_end',
         'export_review_log',
+        'show_export_status',
     )
 
     scene_key = 'w3dExportSettings'
@@ -473,7 +483,18 @@ class ExportW3D(bpy.types.Operator, ExportHelper, ReportHelper):
             'frame_range': (self.animation_frame_start, self.animation_frame_end),
         }
 
-        result = save_data(self, export_settings)
+        status = start_export_status(context, self.filepath, self.show_export_status)
+        self._w3d_export_status = status
+        try:
+            result = save_data(self, export_settings)
+        except Exception as exc:
+            status.record('ERROR', str(exc))
+            status.finish('FAILED', str(exc))
+            raise
+        else:
+            status.finish('FINISHED' if result and 'FINISHED' in result else 'FAILED')
+        finally:
+            self._w3d_export_status = None
 
         if self.export_review_log and self._w3d_log_buffer is not None:
             log_text = '\n'.join(self._w3d_log_buffer) if self._w3d_log_buffer else 'No messages recorded.'
@@ -508,6 +529,7 @@ class ExportW3D(bpy.types.Operator, ExportHelper, ReportHelper):
         col.prop(self, 'file_format')
         col = self.layout.box().column()
         col.prop(self, 'export_mode')
+        col.prop(self, 'show_export_status')
         col.prop(self, 'export_review_log')
 
     def draw_processing_settings(self):
@@ -1163,6 +1185,7 @@ class OBJECT_PROPERTIES_PANEL_PT_w3d(Panel):
             content.label(text='Exports an HLOD reference without mesh geometry.', icon='INFO')
             if role == 'PROXY':
                 content.label(text='Blank identifier uses the name before "~".')
+                content.label(text='Long W3D pivot names are shortened on export.')
             return
         if obj.type != 'MESH':
             content.label(text='Choose an attachment role to export this object.', icon='INFO')
@@ -1267,6 +1290,7 @@ class MATERIAL_PROPERTIES_PANEL_PT_w3d(Panel):
         mat = getattr(obj, 'active_material', None) if obj else None
         if not mat:
             layout.label(text='The active object does not have a material', icon='INFO')
+            layout.operator('w3d.create_texture_blend', icon='TEXTURE')
             return
         settings = getattr(mat, 'w3d_material_settings', None)
         if settings is None:
@@ -1283,6 +1307,15 @@ class MATERIAL_PROPERTIES_PANEL_PT_w3d(Panel):
         obj_settings = getattr(obj, 'w3d_object_settings', None) if obj else None
         if obj_settings:
             overview.prop(obj_settings, 'static_sort_level', text='Static Sort Level')
+
+        blending = layout.box()
+        blending.label(text='Texture Blending')
+        blending.operator('w3d.create_texture_blend', icon='TEXTURE')
+        blending.operator('w3d.refresh_blend_preview', icon='FILE_REFRESH')
+        if len(settings.passes) == 2:
+            for config, label in zip(settings.passes, ('Base Texture', 'Blend Texture')):
+                blending.label(text=label)
+                blending.template_ID(config.stage0, 'texture', open='image.open')
 
         pass_box = layout.box()
         pass_box.label(text='Material Pass Count')
@@ -1310,6 +1343,12 @@ class MATERIAL_PROPERTIES_PANEL_PT_w3d(Panel):
         active_pass = settings.passes[index]
         details = layout.box()
         details.label(text=f'Pass {index + 1}')
+        if obj.type == 'MESH':
+            details.prop_search(active_pass, 'blend_mask', obj.data,
+                                'vertex_colors' if bpy.app.version < (3, 2, 0) else 'color_attributes')
+            details.operator('w3d.paint_blend_mask', icon='VPAINT_HLT')
+            if active_pass.blend_mask:
+                details.label(text='Black = base; white = this pass. Gray blends both.')
 
         tab_row = details.row(align=True)
         tab_row.prop(settings, 'ui_pass_section', expand=True)
@@ -1481,6 +1520,9 @@ CLASSES = (
     W3D_OT_material_pass_remove,
     W3D_OT_material_pass_move,
     W3D_OT_apply_stage_display,
+    W3D_OT_create_texture_blend,
+    W3D_OT_refresh_blend_preview,
+    W3D_OT_paint_blend_mask,
     W3D_OT_select_bones,
     W3D_OT_select_geometry,
     W3D_OT_select_alpha_meshes,
@@ -1532,6 +1574,7 @@ def register():
 
 
 def unregister():
+    unregister_export_status()
     for class_ in reversed(CLASSES):
         bpy.utils.unregister_class(class_)
 
